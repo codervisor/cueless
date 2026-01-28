@@ -13,7 +13,7 @@ created_at: '2026-01-28T11:53:56.057861+00:00'
 
 ## Overview
 
-Build a minimal IM-first control layer that receives Telegram messages, converts them to structured intents, dispatches to swappable agent runtimes, and streams execution status back via IM.
+Build a minimal IM-first control layer that receives IM messages from various platforms (Telegram, Slack), dispatches them to swappable agent runtimes, and streams execution status back via IM.
 
 **Constraints:**
 - IM is a control surface, not a chat UI
@@ -28,17 +28,17 @@ Build a minimal IM-first control layer that receives Telegram messages, converts
 ```mermaid
 sequenceDiagram
     participant User
-    participant Telegram
+    participant IM as IM Platform
     participant Gateway as cueless Gateway
     participant EventStream as Event Stream
     participant Runtime as Agent Runtime
     participant Adapters as Runtime Adapters
     participant CLI as Agent CLI
 
-    User->>Telegram: Send command
-    Telegram->>Gateway: Webhook (message)
-    Gateway->>Gateway: Parse intent
-    Gateway->>Runtime: execute(intent, rawMessage, eventEmitter)
+    User->>IM: Send command
+    Gateway->>IM: Poll for updates
+    IM-->>Gateway: New message
+    Gateway->>Runtime: execute(message, eventEmitter)
     Runtime->>Adapters: Spawn CLI adapter
     Adapters->>CLI: Start subprocess
     
@@ -46,36 +46,34 @@ sequenceDiagram
         CLI-->>Adapters: stdout/stderr
         Adapters->>EventStream: Emit events (start, stdout, stderr)
         EventStream-->>Gateway: Event notification
-        Gateway->>Telegram: Stream status
-        Telegram->>User: Show progress
+        Gateway->>IM: Stream status
+        IM->>User: Show progress
     end
     
     CLI-->>Adapters: Exit (complete/error)
     Adapters->>EventStream: Emit complete/error
     EventStream-->>Gateway: Final event
-    Gateway->>Telegram: Final result
-    Telegram->>User: Show result
+    Gateway->>IM: Final result
+    IM->>User: Show result
 ```
 
 ### Components
 
 1. **IM Gateway** (`/src/gateway/`)
-   - Telegram webhook handler
+   - Abstract IM adapter interface
+   - Pluggable providers with connection methods:
+     - **Telegram**: Long polling (no public endpoint)
+     - **Slack**: Socket Mode/WebSocket (no public endpoint) or Events API (webhooks)
    - Message validation & auth
    - Response formatter
 
-2. **Intent Parser** (`/src/intent/`)
-   - Raw message → structured intent
-   - Intent schema: `{ id, userId, command, params, timestamp }`
-   - All intents route directly to agent runtime (no routing layer)
-
-3. **Agent Runtime Interface** (`/src/runtime/`)
-   - Abstract interface: `execute(intent, rawMessage, eventEmitter)`
+2. **Agent Runtime Interface** (`/src/runtime/`)
+   - Abstract interface: `execute(message, eventEmitter)`
    - Pluggable CLI adapters (claude code, codex-cli, opencode, copilot-cli, gemini-cli)
    - Spawn subprocess with stdin/stdout streaming
    - Lifecycle events: `start`, `stdout`, `stderr`, `complete`, `error`
 
-4. **Event Stream** (`/src/events/`)
+3. **Event Stream** (`/src/events/`)
    - Pub/sub for execution status
    - IM Gateway subscribes to user-specific events
    - Streams back to Telegram
@@ -83,22 +81,21 @@ sequenceDiagram
 ### Execution States
 
 ```
-received → parsing → executing → streaming → complete
-    │           │        │           │
-    └───────────┴────────┴───────────┴───────────▶ error
+received → executing → streaming → complete
+    │          │           │
+    └──────────┴───────────┴───────────▶ error
 ```
 
 Explicit states prevent hidden reasoning exposure.
 
 ### Data Flow
 
-1. User sends: "/deploy website to staging"
-2. Gateway receives webhook → validates
-3. Intent Parser extracts: `{ command: "deploy", target: "website", env: "staging" }`
-4. Gateway sends intent + raw message to configured agent runtime (claude code, codex-cli, opencode, copilot-cli, gemini-cli, etc.)
-5. Runtime streams execution events via stdout/stderr
-6. Gateway captures events and streams to user's Telegram
-7. Result returned when runtime exits
+1. User sends: "deploy website to staging"
+2. Gateway polls IM platform → receives message → validates
+3. Gateway sends raw message to configured agent runtime (claude code, codex-cli, opencode, copilot-cli, gemini-cli, etc.)
+4. Runtime streams execution events via stdout/stderr
+5. Gateway captures events and streams to user's IM platform
+6. Result returned when runtime exits
 
 ## Plan
 
@@ -109,35 +106,29 @@ Explicit states prevent hidden reasoning exposure.
 - [ ] Basic logging
 
 ### Phase 2: IM Gateway
-- [ ] Telegram webhook endpoint (`POST /webhook`)
-- [ ] Bot token validation
+- [ ] Abstract IM adapter interface
+- [ ] Telegram adapter (long polling, v0 default)
 - [ ] Message parsing (text, chat_id, user)
 - [ ] Response sender
 
-### Phase 3: Intent System
-- [ ] Intent schema definition (includes raw message for runtime context)
-- [ ] Simple keyword parser (v0: no NLP)
-- [ ] Validation middleware
-
-### Phase 4: Runtime Interface
-- [ ] Abstract Runtime interface: `execute(intent, rawMessage, eventEmitter)`
+### Phase 3: Runtime Interface
+- [ ] Abstract Runtime interface: `execute(message, eventEmitter)`
 - [ ] Runtime adapter pattern (claude code, codex-cli, opencode, copilot-cli, gemini-cli)
 - [ ] Spawn agent CLI as subprocess with stdin/stdout
 - [ ] Event lifecycle hooks: `start`, `stdout`, `stderr`, `complete`, `error`
 - [ ] Node.js runtime implementation (mock agent)
 
-### Phase 5: Integration
+### Phase 4: Integration
 - [ ] End-to-end flow test
 - [ ] Docker setup
 - [ ] README with usage
 
 ## Test
 
-- [ ] Telegram webhook receives message and returns 200
-- [ ] Invalid bot token rejected
-- [ ] Message parsed into valid intent structure
-- [ ] All messages route to configured agent runtime
-- [ ] Runtime adapter streams stdout/stderr to Telegram
+- [ ] IM platform receives new messages (Telegram in v0)
+- [ ] Invalid credentials rejected
+- [ ] Raw message passed to configured agent runtime
+- [ ] Runtime adapter streams stdout/stderr to IM platform
 - [ ] Runtime swap (claude code → codex-cli → opencode) via env var
 - [ ] Concurrent executions are isolated (stateless)
 
@@ -145,16 +136,17 @@ Explicit states prevent hidden reasoning exposure.
 
 **Tech Stack:**
 - Node.js + TypeScript (faster iteration for v0)
-- Fastify (lightweight HTTP)
+- Fastify (lightweight HTTP, if needed for webhooks)
 - EventEmitter3 (event bus)
-- node-telegram-bot-api (Telegram client)
+- IM clients: node-telegram-bot-api (v0), @slack/bolt, @microsoft/microsoft-graph-client
 
 **Trade-offs:**
-- No NLP in v0: simple keyword matching
 - No persistence: in-memory only
 - Single runtime active at a time (env var switch)
+- Telegram only in v0 (other providers via abstraction layer)
 
 **Future considerations:**
 - Add SQLite for basic metrics (not state)
 - Runtime discovery via filesystem/plugins
 - Rate limiting per user
+- Slack adapter
