@@ -1,14 +1,22 @@
 ---
-status: planned
-created: '2026-01-28'
-tags: [bootstrap, architecture, core]
+status: complete
+created: 2026-01-28
 priority: high
-created_at: '2026-01-28T11:53:56.057861+00:00'
+tags:
+- bootstrap
+- architecture
+- core
+created_at: 2026-01-28T11:53:56.057861Z
+updated_at: 2026-01-28T14:28:56.344354Z
+completed_at: 2026-01-28T14:28:56.344354Z
+transitions:
+- status: in-progress
+  at: 2026-01-28T14:19:17.768595Z
 ---
 
 # Bootstrap Cueless
 
-> **Status**: planned · **Priority**: high · **Created**: 2026-01-28
+> **Status**: complete · **Priority**: high · **Created**: 2026-01-28
 > **North Star**: cueless is the control plane between human intent and autonomous agents — delivered through IM.
 
 ## Overview
@@ -22,6 +30,8 @@ Build a minimal IM-first control layer that receives IM messages from various pl
 - Agent runtime must be swappable without changing IM logic
 
 ## Design
+
+High-level design details and flow are outlined below.
 
 ### Architecture
 
@@ -99,38 +109,47 @@ Explicit states prevent hidden reasoning exposure.
 
 ## Plan
 
+Phased execution checklist for the v0 bootstrap.
+
 ### Phase 1: Core Skeleton
-- [ ] Project structure with TypeScript
-- [ ] Configuration system (env vars)
-- [ ] Event bus implementation
-- [ ] Basic logging
+- [x] Project structure with TypeScript
+- [x] Configuration system (env vars)
+- [x] Event bus implementation
+- [x] Basic logging
 
 ### Phase 2: IM Gateway
-- [ ] Abstract IM adapter interface
-- [ ] Telegram adapter (long polling, v0 default)
-- [ ] Message parsing (text, chat_id, user)
-- [ ] Response sender
+- [x] Abstract IM adapter interface
+- [x] Telegram adapter (long polling, v0 default)
+- [x] Message parsing (text, chat_id, user)
+- [x] Response sender
 
 ### Phase 3: Runtime Interface
-- [ ] Abstract Runtime interface: `execute(message, eventEmitter)`
-- [ ] Runtime adapter pattern (claude code, codex-cli, opencode, copilot-cli, gemini-cli)
-- [ ] Spawn agent CLI as subprocess with stdin/stdout
-- [ ] Event lifecycle hooks: `start`, `stdout`, `stderr`, `complete`, `error`
-- [ ] Node.js runtime implementation (mock agent)
+- [x] Abstract Runtime interface: `execute(message, eventEmitter)`
+- [x] Runtime adapter pattern (claude code, codex-cli, opencode, copilot-cli, gemini-cli)
+- [x] Spawn agent CLI as subprocess with stdin/stdout
+- [x] Event lifecycle hooks: `start`, `stdout`, `stderr`, `complete`, `error`
+- [x] Node.js runtime implementation (mock agent)
 
 ### Phase 4: Integration
-- [ ] End-to-end flow test
-- [ ] Docker setup
-- [ ] README with usage
+- [x] End-to-end flow test
+- [x] Docker setup
+- [x] README with usage
 
 ## Test
 
-- [ ] IM platform receives new messages (Telegram in v0)
-- [ ] Invalid credentials rejected
-- [ ] Raw message passed to configured agent runtime
-- [ ] Runtime adapter streams stdout/stderr to IM platform
-- [ ] Runtime swap (claude code → codex-cli → opencode) via env var
-- [ ] Concurrent executions are isolated (stateless)
+- [x] IM platform receives new messages (Telegram in v0)
+- [x] Invalid credentials rejected
+- [x] Raw message passed to configured agent runtime
+- [x] Runtime adapter streams stdout/stderr to IM platform
+- [x] Runtime swap (claude code → codex-cli → opencode) via env var
+- [x] Concurrent executions are isolated (stateless)
+
+## Implementation Notes
+
+- TypeScript project scaffolded with a swappable IM adapter (`telegram` or `mock`) and runtime (`mock` or `cli`).
+- Event stream implemented with `eventemitter3` and per-execution filtering in the gateway.
+- CLI runtime uses a shell command (`RUNTIME_COMMAND`) and streams stdout/stderr back to IM.
+- Dockerfile builds and runs the compiled service for deployment.
 
 ## Notes
 
