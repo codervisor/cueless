@@ -11,6 +11,7 @@
     "test:e2e": "tsx tests/e2e.ts"
   },
   "dependencies": {
+    "dotenv": "^17.2.3",
     "eventemitter3": "^5.0.1",
     "node-telegram-bot-api": "^0.64.0"
   },

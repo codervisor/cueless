@@ -5,10 +5,16 @@ import { Logger } from "../logging";
 export class TelegramAdapter implements IMAdapter {
   private bot?: TelegramBot;
 
-  constructor(private readonly token: string, private readonly logger: Logger) { }
+  constructor(
+    private readonly token: string,
+    private readonly pollingInterval: number,
+    private readonly logger: Logger
+  ) { }
 
   async start(onMessage: (message: IMMessage) => void): Promise<void> {
-    this.bot = new TelegramBot(this.token, { polling: true });
+    this.bot = new TelegramBot(this.token, {
+      polling: { interval: this.pollingInterval }
+    });
     this.bot.on("message", (message: Message) => {
       if (!message.text || !message.chat?.id) {
         return;

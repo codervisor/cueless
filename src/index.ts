@@ -14,7 +14,11 @@ if (!config.telegramToken) {
   throw new Error("TELEGRAM_BOT_TOKEN is required.");
 }
 
-const adapter = new TelegramAdapter(config.telegramToken, logger);
+const adapter = new TelegramAdapter(
+  config.telegramToken,
+  config.telegramPollingInterval,
+  logger
+);
 
 const gateway = new Gateway(adapter, runtime, eventBus, logger);
 
