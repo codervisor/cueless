@@ -7,7 +7,7 @@ Cueless is an IM-first control plane that receives commands, dispatches them to 
 1. Install dependencies:
 
 ```bash
-npm install
+pnpm install
 ```
 
 2. Configure environment variables:
@@ -19,7 +19,7 @@ cp .env.example .env
 3. Run in development:
 
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 ## Configuration
@@ -44,7 +44,7 @@ npm run dev
 Run the mock adapter + mock runtime test:
 
 ```bash
-npm run test:e2e
+pnpm run test:e2e
 ```
 
 ## Docker
