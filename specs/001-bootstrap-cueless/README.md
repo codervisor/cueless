@@ -25,18 +25,36 @@ Build a minimal IM-first control layer that receives Telegram messages, converts
 
 ### Architecture
 
-```
-┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│   Telegram  │────▶│  cueless     │────▶│   Agent     │
-│   (IM)      │◀────│  Gateway     │◀────│   Runtime   │
-│             │     │              │     │  (swappable)│
-└─────────────┘     └──────────────┘     └──────┬──────┘
-                           │                    │
-                            ▼                  ▼
-                     ┌──────────────┐     ┌──────────────┐
-                     │   Event      │◀────│  Runtime     │
-                     │   Stream     │     │  Adapters    │
-                     └──────────────┘     └──────────────┘
+```mermaid
+sequenceDiagram
+    participant User
+    participant Telegram
+    participant Gateway as cueless Gateway
+    participant EventStream as Event Stream
+    participant Runtime as Agent Runtime
+    participant Adapters as Runtime Adapters
+    participant CLI as Agent CLI
+
+    User->>Telegram: Send command
+    Telegram->>Gateway: Webhook (message)
+    Gateway->>Gateway: Parse intent
+    Gateway->>Runtime: execute(intent, rawMessage, eventEmitter)
+    Runtime->>Adapters: Spawn CLI adapter
+    Adapters->>CLI: Start subprocess
+    
+    loop Execution
+        CLI-->>Adapters: stdout/stderr
+        Adapters->>EventStream: Emit events (start, stdout, stderr)
+        EventStream-->>Gateway: Event notification
+        Gateway->>Telegram: Stream status
+        Telegram->>User: Show progress
+    end
+    
+    CLI-->>Adapters: Exit (complete/error)
+    Adapters->>EventStream: Emit complete/error
+    EventStream-->>Gateway: Final event
+    Gateway->>Telegram: Final result
+    Telegram->>User: Show result
 ```
 
 ### Components
