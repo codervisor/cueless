@@ -1,4 +1,4 @@
-import { IMAdapter, IMMessage } from "./types";
+import { IMAdapter, IMMessage } from "../src/gateway/types";
 
 export class MockAdapter implements IMAdapter {
   private handler?: (message: IMMessage) => void;

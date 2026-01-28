@@ -1,9 +1,9 @@
 import assert from "assert";
 import { EventBus } from "../src/events/eventBus";
 import { Gateway } from "../src/gateway/gateway";
-import { MockAdapter } from "../src/gateway/mockAdapter";
 import { createLogger } from "../src/logging";
-import { MockRuntime } from "../src/runtime/mockRuntime";
+import { MockAdapter } from "./mockAdapter";
+import { MockRuntime } from "./mockRuntime";
 
 const run = async () => {
   const logger = createLogger("error");

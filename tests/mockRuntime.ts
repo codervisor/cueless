@@ -1,6 +1,6 @@
-import { EventBus } from "../events/eventBus";
-import { IMMessage } from "../gateway/types";
-import { Runtime } from "./types";
+import { EventBus } from "../src/events/eventBus";
+import { IMMessage } from "../src/gateway/types";
+import { Runtime } from "../src/runtime/types";
 
 export class MockRuntime implements Runtime {
   async execute(message: IMMessage, executionId: string, eventBus: EventBus): Promise<void> {

@@ -1,7 +1,6 @@
 import { loadConfig } from "./config";
 import { EventBus } from "./events/eventBus";
 import { Gateway } from "./gateway/gateway";
-import { MockAdapter } from "./gateway/mockAdapter";
 import { TelegramAdapter } from "./gateway/telegramAdapter";
 import { createLogger } from "./logging";
 import { createRuntime } from "./runtime";
@@ -11,13 +10,11 @@ const logger = createLogger(config.logLevel);
 const eventBus = new EventBus();
 const runtime = createRuntime(config, logger);
 
-const adapter = config.imProvider === "mock"
-  ? new MockAdapter()
-  : new TelegramAdapter(config.telegramToken || "", logger);
-
-if (config.imProvider === "telegram" && !config.telegramToken) {
-  throw new Error("TELEGRAM_BOT_TOKEN is required when IM_PROVIDER=telegram.");
+if (!config.telegramToken) {
+  throw new Error("TELEGRAM_BOT_TOKEN is required.");
 }
+
+const adapter = new TelegramAdapter(config.telegramToken, logger);
 
 const gateway = new Gateway(adapter, runtime, eventBus, logger);
 
