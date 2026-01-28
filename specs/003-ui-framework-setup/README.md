@@ -1,16 +1,20 @@
 ---
-status: planned
-created: '2026-01-28'
+status: in-progress
+created: 2026-01-28
+priority: high
 tags:
 - web-ui
 - nextjs
 - shadcn
 - tailwind
 - frontend
-priority: high
+created_at: 2026-01-28T15:16:36.955914Z
+updated_at: 2026-01-28T15:29:43.899126266Z
+transitions:
+- status: in-progress
+  at: 2026-01-28T15:29:43.899126266Z
 dependencies:
 - 001-bootstrap-cueless
-created_at: '2026-01-28T15:16:36.955914+00:00'
 ---
 
 # UI Framework Setup
