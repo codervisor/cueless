@@ -4,6 +4,10 @@
   "private": true,
   "description": "IM-first control layer for dispatching agent runtimes",
   "main": "dist/index.js",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc -p tsconfig.json",

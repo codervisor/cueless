@@ -60,17 +60,17 @@ cueless/
 
 ### Technology Stack
 
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| Framework | Next.js 16 (App Router) | React framework with SSR/SSG |
-| Language | TypeScript | Type safety |
-| Styling | Tailwind CSS 4 | Utility-first CSS |
-| Components | shadcn/ui | Accessible, customizable UI |
-| State | React Query (TanStack) | Server state management |
-| Forms | React Hook Form + Zod | Form handling & validation |
-| Icons | Lucide React | Consistent iconography |
-| Fonts | Inter (Sans), JetBrains Mono | Typography |
-| Build | Turborepo | Monorepo task orchestration |
+| Layer      | Technology                   | Purpose                      |
+| ---------- | ---------------------------- | ---------------------------- |
+| Framework  | Next.js 16 (App Router)      | React framework with SSR/SSG |
+| Language   | TypeScript                   | Type safety                  |
+| Styling    | Tailwind CSS 4               | Utility-first CSS            |
+| Components | shadcn/ui                    | Accessible, customizable UI  |
+| State      | React Query (TanStack)       | Server state management      |
+| Forms      | React Hook Form + Zod        | Form handling & validation   |
+| Icons      | Lucide React                 | Consistent iconography       |
+| Fonts      | Inter (Sans), JetBrains Mono | Typography                   |
+| Build      | Turborepo                    | Monorepo task orchestration  |
 
 ### Design System
 
