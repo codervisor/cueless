@@ -1,16 +1,19 @@
 ---
 status: planned
-created: '2026-01-28'
+created: 2026-01-28
+priority: high
 tags:
 - web-ui
 - nextjs
 - shadcn
 - tailwind
 - frontend
-priority: high
+depends_on:
+- 004-migrate-to-monorepo
+created_at: 2026-01-28T15:16:36.955914Z
+updated_at: 2026-02-23T02:17:27.631382Z
 dependencies:
 - 001-bootstrap-cueless
-created_at: '2026-01-28T15:16:36.955914+00:00'
 ---
 
 # UI Framework Setup

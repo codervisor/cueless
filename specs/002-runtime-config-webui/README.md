@@ -10,8 +10,9 @@ tags:
 depends_on:
 - 001-bootstrap-cueless
 - 003-ui-framework-setup
+- 004-migrate-to-monorepo
 created_at: 2026-01-28T15:09:13.024304Z
-updated_at: 2026-01-28T15:17:41.831635Z
+updated_at: 2026-02-23T02:17:27.584902Z
 dependencies:
 - 001-bootstrap-cueless
 ---
