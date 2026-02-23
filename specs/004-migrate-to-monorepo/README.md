@@ -1,18 +1,25 @@
 ---
-status: planned
-created: '2026-02-23'
-tags:
-  - monorepo
-  - turborepo
-  - pnpm
-  - restructure
+status: complete
+created: 2026-02-23
 priority: high
-created_at: '2026-02-23T02:16:53.482087+00:00'
+tags:
+- monorepo
+- turborepo
+- pnpm
+- restructure
+created_at: 2026-02-23T02:16:53.482087Z
+updated_at: 2026-02-23T05:23:22.097832Z
+completed_at: 2026-02-23T05:23:22.097832Z
+transitions:
+- status: in-progress
+  at: 2026-02-23T03:23:51.244743Z
+- status: complete
+  at: 2026-02-23T05:23:22.097832Z
 ---
 
 # Migrate To Monorepo
 
-> **Status**: planned · **Priority**: high · **Created**: 2026-02-23  
+> **Status**: complete · **Priority**: high · **Created**: 2026-02-23  
 > **North Star**: Restructure cueless from a single-package Node app into a pnpm + Turborepo monorepo that hosts the backend and future frontend packages side-by-side.
 
 ## Overview
@@ -89,29 +96,29 @@ packages:
 
 ## Plan
 
-- [ ] Install Turborepo as a root dev dependency (`pnpm add -Dw turbo`)
-- [ ] Create `pnpm-workspace.yaml` at repo root
-- [ ] Create `turbo.json` with `build`, `dev`, `test`, `lint` tasks
-- [ ] Create `apps/api/` directory structure and move `src/`, `tests/` into it
-- [ ] Move `Dockerfile` into `apps/api/`
-- [ ] Create `apps/api/package.json` (name `@cueless/api`, copy relevant deps from root)
-- [ ] Create `apps/api/tsconfig.json` extending root config
-- [ ] Update root `package.json`: remove moved deps, add workspace scripts delegating to turbo
-- [ ] Create `packages/tsconfig/` with base `tsconfig.json` and `package.json`
-- [ ] Update all import paths and build output references if changed
-- [ ] Verify `pnpm install` resolves workspace correctly
-- [ ] Verify `pnpm -F @cueless/api test` runs existing tests green
-- [ ] Update Dockerfile `COPY` / `WORKDIR` paths for new layout
-- [ ] Update CI workflow (if any) to use `turbo run build test`
+- [x] Install Turborepo as a root dev dependency (`pnpm add -Dw turbo`)
+- [x] Create `pnpm-workspace.yaml` at repo root
+- [x] Create `turbo.json` with `build`, `dev`, `test`, `lint` tasks
+- [x] Create `apps/api/` directory structure and move `src/`, `tests/` into it
+- [x] Move `Dockerfile` into `apps/api/`
+- [x] Create `apps/api/package.json` (name `@cueless/api`, copy relevant deps from root)
+- [x] Create `apps/api/tsconfig.json` extending root config
+- [x] Update root `package.json`: remove moved deps, add workspace scripts delegating to turbo
+- [x] Create `packages/tsconfig/` with base `tsconfig.json` and `package.json`
+- [x] Update all import paths and build output references if changed
+- [x] Verify `pnpm install` resolves workspace correctly
+- [x] Verify `pnpm -F @cueless/api test` runs existing tests green
+- [x] Update Dockerfile `COPY` / `WORKDIR` paths for new layout
+- [x] Update CI workflow (if any) to use `turbo run build test` (no applicable CI workflow changes required)
 
 ## Test
 
-- [ ] `pnpm install` succeeds with no duplicate lockfile conflicts
-- [ ] `pnpm turbo run build` builds `apps/api` without errors
-- [ ] `pnpm turbo run test` passes all existing tests in `apps/api/tests/`
-- [ ] `docker build` succeeds using the updated `apps/api/Dockerfile`
-- [ ] No TypeScript errors across the workspace (`pnpm turbo run lint` or `tsc --noEmit`)
-- [ ] `apps/` and `packages/` directories are ready for spec 003 work
+- [x] `pnpm install` succeeds with no duplicate lockfile conflicts
+- [x] `pnpm turbo run build` builds `apps/api` without errors
+- [x] `pnpm turbo run test` passes all existing tests in `apps/api/tests/`
+- [x] `docker build` succeeds using the updated `apps/api/Dockerfile`
+- [x] No TypeScript errors across the workspace (`pnpm turbo run lint` or `tsc --noEmit`)
+- [x] `apps/` and `packages/` directories are ready for spec 003 work
 
 ## Notes
 
