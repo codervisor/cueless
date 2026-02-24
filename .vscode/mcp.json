@@ -1,11 +1,9 @@
 {
-  "mcpServers": {
+  "servers": {
     "lean-spec": {
       "args": [
         "-y",
-        "@leanspec/mcp",
-        "--project",
-        "/Users/marvzhang/projects/codervisor/cueless"
+        "@leanspec/mcp@latest"
       ],
       "command": "npx"
     }
