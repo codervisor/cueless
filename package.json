@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "IM-first control layer for dispatching agent runtimes",
-  "packageManager": "pnpm@9.15.4",
+  "packageManager": "pnpm@10.28.0",
   "engines": {
     "node": ">=22"
   },
