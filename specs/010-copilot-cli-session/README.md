@@ -1,0 +1,91 @@
+---
+status: planned
+created: 2026-02-24
+priority: medium
+tags:
+- agent-runtime
+- session
+- copilot
+parent: 007-agent-session-runtime
+depends_on:
+- 011-session-runtime-foundation
+created_at: 2026-02-24T06:35:01.720490Z
+updated_at: 2026-02-24T06:35:01.720490Z
+---
+
+# Copilot CLI Session Integration
+
+> **Status**: planned · **Priority**: high · **Created**: 2026-02-24
+> **North Star**: Wire GitHub Copilot CLI (`gh copilot suggest`) into the `AgentSession` interface using the transcript-fallback strategy, so multi-turn conversations with Copilot maintain context across messages even though the CLI has no native session resumption.
+
+## Overview
+
+Unlike Claude Code and Gemini CLI, `gh copilot suggest` has no native session identifier. Each invocation is stateless from the CLI's perspective. To preserve conversation context, `CopilotSession` maintains a local transcript (list of `{role, content}` turns) and prepends prior turns to each new prompt.
+
+This spec builds on the core session infrastructure from spec 007 and produces a concrete `CopilotSession` implementation.
+
+## Design
+
+### Invocation Pattern
+
+Every call re-invokes the CLI with the full accumulated context injected into the prompt:
+
+```
+gh copilot suggest -t shell "<transcript + latest user message>"
+```
+
+The transcript is formatted as a plain-text conversation header prepended to the user's message:
+
+```
+Previous conversation:
+User: <turn 1>
+Assistant: <turn 1 reply>
+User: <turn 2>
+Assistant: <turn 2 reply>
+
+User: <current message>
+```
+
+### `CopilotSession` Sketch
+
+```ts
+export class CopilotSession implements AgentSession {
+  private state: TranscriptSessionState = { strategy: "transcript", turns: [] };
+
+  async send(userText: string, executionId: string, eventBus: EventBus): Promise<string> {
+    const prompt = buildPrompt(this.state.turns, userText);
+    const { stdout } = await spawnAndCollect("gh", ["copilot", "suggest", "-t", "shell", prompt]);
+    const response = stripAnsi(stdout.trim());
+
+    this.state.turns.push({ role: "user", content: userText });
+    this.state.turns.push({ role: "assistant", content: response });
+
+    return response;
+  }
+}
+```
+
+### Transcript Pruning
+
+To avoid exceeding prompt limits, the transcript is capped at the most recent N turns (configurable, default: 10). Older turns are dropped when the cap is reached.
+
+### Target Type
+
+The `-t shell` flag is the default. `AgentConfig` can carry an optional `copilotTargetType` field (`"shell" | "git" | "gh"`) to change this.
+
+## Plan
+
+- [ ] Implement `CopilotSession` in `runtime/session/copilotSession.ts`
+- [ ] Add `buildPrompt` helper that formats the transcript + latest message into a single string
+- [ ] Add `maxTurns` option (default 10) to cap transcript size
+- [ ] Register `"session-copilot"` in the `createRuntime` factory (from spec 007)
+- [ ] Add optional `copilotTargetType` field to `AgentConfig`
+- [ ] Add unit tests: transcript accumulation, pruning at `maxTurns`, correct `gh copilot suggest` args
+
+## Test
+
+- [ ] First call invokes `gh copilot suggest -t shell "<message>"` with no prior context
+- [ ] Second call prepends the first turn pair to the prompt
+- [ ] After `maxTurns` turns, oldest turns are pruned and not included in subsequent prompts
+- [ ] Response text is stripped of ANSI codes before being stored in the transcript and returned
+- [ ] `copilotTargetType` of `"git"` changes `-t` flag to `git`
