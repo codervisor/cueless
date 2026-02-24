@@ -1,26 +1,36 @@
 import { config as dotenvConfig } from "dotenv";
 import { existsSync } from "fs";
-import { resolve } from "path";
+import { dirname, resolve } from "path";
+
+/**
+ * Walk up from `startDir` until a directory containing `filename` is found,
+ * or the filesystem root is reached. Returns the resolved path or undefined.
+ */
+const findFileUpwards = (filename: string, startDir: string): string | undefined => {
+  let dir = startDir;
+  while (true) {
+    const candidate = resolve(dir, filename);
+    if (existsSync(candidate)) return candidate;
+    const parent = dirname(dir);
+    if (parent === dir) return undefined; // reached fs root
+    dir = parent;
+  }
+};
 
 /**
  * Load environment variables from .env files in Next.js style:
  * 1. .env - default values
  * 2. .env.local - local overrides (not committed to git)
+ *
+ * Searches upward from process.cwd() so .env at the monorepo root is found
+ * regardless of which package directory pnpm sets as cwd.
  */
 export const loadEnv = (): void => {
-  const rootDir = resolve(__dirname, "..");
+  const envPath = findFileUpwards(".env", process.cwd());
+  if (envPath) dotenvConfig({ path: envPath });
 
-  // Load .env first (default values)
-  const envPath = resolve(rootDir, ".env");
-  if (existsSync(envPath)) {
-    dotenvConfig({ path: envPath });
-  }
-
-  // Load .env.local second (overrides .env)
-  const envLocalPath = resolve(rootDir, ".env.local");
-  if (existsSync(envLocalPath)) {
-    dotenvConfig({ path: envLocalPath, override: true });
-  }
+  const envLocalPath = findFileUpwards(".env.local", process.cwd());
+  if (envLocalPath) dotenvConfig({ path: envLocalPath, override: true });
 };
 
 export type ChannelType = "telegram" | "slack" | "discord";
