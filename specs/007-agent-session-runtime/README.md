@@ -34,12 +34,12 @@ The current `CliRuntime` spawns a fresh, stateless process for every message. Th
 
 ## Child Specs
 
-| Spec | Scope | Notes |
-| ---- | ----- | ----- |
-| [011-session-runtime-foundation](../011-session-runtime-foundation/) | Core infrastructure | `AgentSession` / `SessionManager` interfaces, `InMemorySessionManager`, `SessionRuntime`, `AgentConfig` extension, `ChannelHub` aggregation |
-| [008-claude-code-session](../008-claude-code-session/) | Claude Code integration | Native session via `claude --resume <id>` |
-| [009-gemini-cli-session](../009-gemini-cli-session/) | Gemini CLI integration | Native session via `gemini --chat-id <id>` |
-| [010-copilot-cli-session](../010-copilot-cli-session/) | Copilot CLI integration | Transcript fallback via `gh copilot suggest` |
+| Spec                                                                 | Scope                   | Notes                                                                                                                                       |
+| -------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| [011-session-runtime-foundation](../011-session-runtime-foundation/) | Core infrastructure     | `AgentSession` / `SessionManager` interfaces, `InMemorySessionManager`, `SessionRuntime`, `AgentConfig` extension, `ChannelHub` aggregation |
+| [008-claude-code-session](../008-claude-code-session/)               | Claude Code integration | Native session via `claude --resume <id>`                                                                                                   |
+| [009-gemini-cli-session](../009-gemini-cli-session/)                 | Gemini CLI integration  | Native session via `gemini --chat-id <id>`                                                                                                  |
+| [010-copilot-cli-session](../010-copilot-cli-session/)               | Copilot CLI integration | Transcript fallback via `copilot -p`                                                                                                        |
 
 ## Sequencing
 
