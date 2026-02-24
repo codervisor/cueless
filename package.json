@@ -10,9 +10,9 @@
   "scripts": {
     "dev": "turbo run dev --parallel",
     "build": "turbo run build",
-    "start": "pnpm --filter @cueless/api start",
+    "start": "pnpm --filter @cueless/core start",
     "test": "turbo run test",
-    "test:e2e": "pnpm --filter @cueless/api test:e2e",
+    "test:e2e": "pnpm --filter @cueless/core test:e2e",
     "lint": "turbo run lint"
   },
   "devDependencies": {

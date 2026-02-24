@@ -19,7 +19,7 @@ cp .env.example .env
 3. Run in development:
 
 ```bash
-pnpm --filter @cueless/api dev
+pnpm --filter @cueless/core dev
 ```
 
 ## Configuration
@@ -44,13 +44,13 @@ pnpm --filter @cueless/api dev
 Run the mock adapter + mock runtime test:
 
 ```bash
-pnpm --filter @cueless/api test:e2e
+pnpm --filter @cueless/core test:e2e
 ```
 
 ## Docker
 
 ```bash
-docker build -f apps/api/Dockerfile -t cueless .
+docker build -f apps/core/Dockerfile -t cueless .
 ```
 
 ```bash

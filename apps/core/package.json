@@ -1,8 +1,8 @@
 {
-  "name": "@cueless/api",
+  "name": "@cueless/core",
   "version": "0.1.0",
   "private": true,
-  "description": "Cueless backend gateway and runtime",
+  "description": "Cueless core — gateway, hub, and agent session runtime",
   "main": "dist/index.js",
   "bin": {
     "cueless": "dist/src/cli.js"
