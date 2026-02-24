@@ -18,8 +18,9 @@ function getBinPath(): string {
 
 function buildPlist(binPath: string): string {
   const isNodeFallback = binPath === process.execPath;
+  // __dirname at runtime = dist/service/, so ../cli.js resolves to dist/cli.js
   const programArgs = isNodeFallback
-    ? `<string>${binPath}</string>\n    <string>${join(__dirname, "..", "..", "dist", "src", "cli.js")}</string>\n    <string>start</string>`
+    ? `<string>${binPath}</string>\n    <string>${join(__dirname, "..", "cli.js")}</string>\n    <string>start</string>`
     : `<string>${binPath}</string>\n    <string>start</string>`;
 
   return `<?xml version="1.0" encoding="UTF-8"?>

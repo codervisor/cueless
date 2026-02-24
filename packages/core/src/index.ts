@@ -8,6 +8,8 @@ import { DefaultRouter } from "./hub/router";
 import { createLogger } from "./logging";
 import { createAgentRegistry } from "./runtime";
 
+export { loadConfig, loadEnv } from "./config";
+
 const createAdapter = (channel: ChannelConfig, logger: ReturnType<typeof createLogger>): IMAdapter => {
   if (channel.type === "telegram") {
     if (typeof channel.token !== "string" || channel.token.length === 0) {

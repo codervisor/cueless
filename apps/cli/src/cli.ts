@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { loadConfig, loadEnv } from "./config";
+import { loadConfig, loadEnv, startDaemon } from "@cueless/core";
 import { serviceManager } from "./service";
-import { startDaemon } from "./index";
 
 const program = new Command();
 
@@ -39,7 +38,7 @@ program
     console.log(`  Channels configured : ${config.channels.length}`);
     console.log(`  Agents configured   : ${config.agents.length}`);
     console.log(`  Default agent       : ${config.defaultAgent ?? "(none)"}`);
-    console.log(`  Log level         : ${config.logLevel}`);
+    console.log(`  Log level           : ${config.logLevel}`);
     console.log();
 
     // Check if a background service is running

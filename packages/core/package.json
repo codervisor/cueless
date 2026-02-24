@@ -3,23 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "description": "Cueless core — gateway, hub, and agent session runtime",
-  "main": "dist/index.js",
-  "bin": {
-    "cueless": "dist/src/cli.js"
-  },
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "dev": "tsx src/cli.ts start",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/src/cli.js start",
     "test": "tsx --test tests/*.test.ts && tsx tests/e2e.ts",
     "test:unit": "tsx --test tests/*.test.ts",
     "test:e2e": "tsx tests/e2e.ts"
   },
   "dependencies": {
-    "commander": "^14.0.3",
     "dotenv": "^17.2.3",
     "eventemitter3": "^5.0.1",
     "node-telegram-bot-api": "^0.64.0"

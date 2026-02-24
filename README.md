@@ -19,7 +19,7 @@ cp .env.example .env
 3. Run in development:
 
 ```bash
-pnpm --filter @cueless/core dev
+pnpm --filter @cueless/cli dev
 ```
 
 ## Configuration
@@ -50,7 +50,7 @@ pnpm --filter @cueless/core test:e2e
 ## Docker
 
 ```bash
-docker build -f packages/core/Dockerfile -t cueless .
+docker build -f apps/cli/Dockerfile -t cueless .
 ```
 
 ```bash

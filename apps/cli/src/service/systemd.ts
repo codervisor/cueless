@@ -17,8 +17,9 @@ function getBinPath(): string {
 
 function buildUnit(binPath: string): string {
   const isNodeFallback = binPath === process.execPath;
+  // __dirname at runtime = dist/service/, so ../cli.js resolves to dist/cli.js
   const execStart = isNodeFallback
-    ? `${binPath} ${join(__dirname, "..", "..", "dist", "src", "cli.js")} start`
+    ? `${binPath} ${join(__dirname, "..", "cli.js")} start`
     : `${binPath} start`;
 
   return `[Unit]
