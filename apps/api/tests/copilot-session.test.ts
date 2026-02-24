@@ -15,35 +15,29 @@ test("CopilotSession first call has no history and second includes transcript", 
     };
   };
 
-  const session = new CopilotSession("telegram", "chat-1", { name: "copilot", command: "gh" }, run);
+  const session = new CopilotSession("telegram", "chat-1", { name: "copilot", command: "copilot" }, run);
   const first = await session.send("how to list files", "exec-1", {} as never);
   await session.send("and count them", "exec-2", {} as never);
 
   assert.equal(first, "first answer");
-  assert.equal(calls[0]?.[0], "copilot");
-  assert.equal(calls[0]?.[1], "suggest");
-  assert.equal(calls[0]?.[2], "-t");
-  assert.equal(calls[0]?.[3], "shell");
-  assert.equal(calls[0]?.[4], "how to list files");
-  assert.ok(calls[1]?.[4].includes("Previous conversation:"));
-  assert.ok(calls[1]?.[4].includes("User: how to list files"));
-  assert.ok(calls[1]?.[4].includes("Assistant: first answer"));
+  assert.equal(calls[0]?.[0], "-p");
+  assert.equal(calls[0]?.[1], "how to list files");
+  assert.ok(calls[1]?.[1].includes("Previous conversation:"));
+  assert.ok(calls[1]?.[1].includes("User: how to list files"));
+  assert.ok(calls[1]?.[1].includes("Assistant: first answer"));
 });
 
-test("CopilotSession prunes transcript based on maxTurns and supports git target", async () => {
+test("CopilotSession prunes transcript based on maxTurns", async () => {
   const prompts: string[] = [];
-  const targetTypes: string[] = [];
 
   const run: CommandRunner = async (_command, args) => {
-    prompts.push(args[4] ?? "");
-    targetTypes.push(args[3] ?? "");
+    prompts.push(args[1] ?? "");
     return { code: 0, stderr: "", stdout: `answer-${prompts.length}` };
   };
 
   const session = new CopilotSession("telegram", "chat-1", {
     name: "copilot",
-    command: "gh",
-    copilotTargetType: "git",
+    command: "copilot",
     maxTurns: 1
   }, run);
 
@@ -51,7 +45,6 @@ test("CopilotSession prunes transcript based on maxTurns and supports git target
   await session.send("second", "exec-2", {} as never);
   await session.send("third", "exec-3", {} as never);
 
-  assert.equal(targetTypes[0], "git");
   assert.ok(prompts[2]?.includes("User: second"));
   assert.equal(prompts[2]?.includes("User: first"), false);
 });

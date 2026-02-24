@@ -31,14 +31,10 @@ export class CopilotSession implements AgentSession {
 
   async send(userText: string, _executionId: string, _eventBus: EventBus): Promise<string> {
     const prompt = buildPrompt(this.state.turns, userText);
-    const targetType = this.config.copilotTargetType ?? "shell";
 
     const args = [
       ...(this.config.args || []),
-      "copilot",
-      "suggest",
-      "-t",
-      targetType,
+      "-p",
       prompt
     ];
 

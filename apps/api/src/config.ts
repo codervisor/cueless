@@ -42,7 +42,6 @@ export interface AgentConfig {
   workingDir?: string;
   timeoutMs?: number;
   sessionTimeoutMs?: number;
-  copilotTargetType?: "shell" | "git" | "gh";
   maxTurns?: number;
 }
 
