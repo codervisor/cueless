@@ -5,13 +5,13 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.json ./
-COPY apps/core/package.json ./apps/core/package.json
+COPY packages/core/package.json ./packages/core/package.json
 COPY packages/tsconfig/package.json ./packages/tsconfig/package.json
 COPY packages/tsconfig/base.json ./packages/tsconfig/base.json
 
 RUN pnpm install --frozen-lockfile
 
-COPY apps/core ./apps/core
+COPY packages/core ./packages/core
 
 RUN pnpm --filter @cueless/core build
 

@@ -50,7 +50,7 @@ pnpm --filter @cueless/core test:e2e
 ## Docker
 
 ```bash
-docker build -f apps/core/Dockerfile -t cueless .
+docker build -f packages/core/Dockerfile -t cueless .
 ```
 
 ```bash
