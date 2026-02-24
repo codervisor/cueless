@@ -1,33 +1,53 @@
 import { loadConfig } from "./config";
+import { ChannelConfig } from "./config";
 import { EventBus } from "./events/eventBus";
-import { Gateway } from "./gateway/gateway";
 import { TelegramAdapter } from "./gateway/telegramAdapter";
+import { IMAdapter } from "./gateway/types";
+import { ChannelHub } from "./hub/hub";
+import { DefaultRouter } from "./hub/router";
 import { createLogger } from "./logging";
-import { createRuntime } from "./runtime";
+import { createAgentRegistry } from "./runtime";
+
+const createAdapter = (channel: ChannelConfig, logger: ReturnType<typeof createLogger>): IMAdapter => {
+  if (channel.type === "telegram") {
+    if (typeof channel.token !== "string" || channel.token.length === 0) {
+      throw new Error(`Telegram channel '${channel.id}' is missing token.`);
+    }
+
+    const pollingInterval =
+      typeof channel.pollingInterval === "number" && Number.isFinite(channel.pollingInterval)
+        ? channel.pollingInterval
+        : 300;
+
+    return new TelegramAdapter(channel.id, channel.token, pollingInterval, logger);
+  }
+
+  throw new Error(`Unsupported channel type '${channel.type}' for channel '${channel.id}'.`);
+};
 
 export async function startDaemon(): Promise<void> {
   const config = loadConfig();
   const logger = createLogger(config.logLevel);
   const eventBus = new EventBus();
-  const runtime = createRuntime(config, logger);
+  const registry = createAgentRegistry(config, logger);
 
-  if (!config.telegramToken) {
-    throw new Error("TELEGRAM_BOT_TOKEN is required.");
+  if (config.channels.length === 0) {
+    throw new Error("At least one channel must be configured.");
   }
 
-  const adapter = new TelegramAdapter(
-    config.telegramToken,
-    config.telegramPollingInterval,
-    logger
-  );
+  if (config.agents.length === 0) {
+    throw new Error("At least one agent must be configured.");
+  }
 
-  const gateway = new Gateway(adapter, runtime, eventBus, logger);
+  const adapters = config.channels.map((channel) => createAdapter(channel, logger));
+  const router = new DefaultRouter(config.channels, registry);
+  const hub = new ChannelHub(adapters, router, eventBus, logger);
 
-  await gateway.start();
+  await hub.start();
 
   const shutdown = async () => {
     logger.info("Shutting down...");
-    await gateway.stop();
+    await hub.stop();
     process.exit(0);
   };
 

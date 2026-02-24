@@ -38,7 +38,10 @@ export class Gateway {
   ) { }
 
   async start(): Promise<void> {
-    await this.adapter.start((message) => void this.handleMessage(message));
+    await this.adapter.start((message) => void this.handleMessage({
+      ...message,
+      channelId: this.adapter.id
+    }));
     this.logger.info("Gateway started.");
   }
 
@@ -55,12 +58,17 @@ export class Gateway {
 
     const executionId = randomUUID();
     const chatId = message.chatId;
+    const channelId = message.channelId;
 
-    this.logger.info("Received message.", { executionId, chatId });
+    this.logger.info("Received message.", { executionId, channelId, chatId });
     await this.adapter.sendMessage(chatId, `Received command. Execution ID: ${executionId}`);
 
     const unsubscribe = this.eventBus.on(async (event) => {
-      if (event.executionId !== executionId || event.chatId !== chatId) {
+      if (
+        event.executionId !== executionId
+        || event.channelId !== channelId
+        || event.chatId !== chatId
+      ) {
         return;
       }
       const text = formatEvent(event);
@@ -73,6 +81,7 @@ export class Gateway {
       const reason = error instanceof Error ? error.message : "unknown";
       this.eventBus.emit({
         executionId,
+        channelId,
         chatId,
         type: "error",
         timestamp: Date.now(),

@@ -36,12 +36,9 @@ program
     const config = loadConfig();
 
     console.log("\ncueless status\n");
-    console.log(`  IM provider       : ${config.imProvider}`);
-    console.log(`  Telegram token    : ${config.telegramToken ? "set" : "NOT SET"}`);
-    console.log(`  Runtime type      : ${config.runtimeType}`);
-    console.log(`  Runtime command   : ${config.runtimeCommand ?? "(none)"}`);
-    console.log(`  Runtime workdir   : ${config.runtimeWorkingDir ?? "(none)"}`);
-    console.log(`  Runtime timeout   : ${config.runtimeTimeoutMs}ms`);
+    console.log(`  Channels configured : ${config.channels.length}`);
+    console.log(`  Agents configured   : ${config.agents.length}`);
+    console.log(`  Default agent       : ${config.defaultAgent ?? "(none)"}`);
     console.log(`  Log level         : ${config.logLevel}`);
     console.log();
 

@@ -15,6 +15,7 @@ const run = async () => {
   await gateway.start();
 
   await adapter.simulateIncoming({
+    channelId: "mock",
     chatId: "test-chat",
     userId: "user-1",
     text: "deploy staging"

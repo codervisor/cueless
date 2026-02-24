@@ -1,47 +1,53 @@
 import { spawn } from "child_process";
-import { Config } from "../config";
+import { AgentConfig } from "../config";
 import { EventBus } from "../events/eventBus";
 import { IMMessage } from "../gateway/types";
 import { Logger } from "../logging";
 import { Runtime } from "./types";
 
 export class CliRuntime implements Runtime {
-  constructor(private readonly config: Config, private readonly logger: Logger) { }
+  constructor(private readonly config: AgentConfig, private readonly logger: Logger) { }
 
   async execute(message: IMMessage, executionId: string, eventBus: EventBus): Promise<void> {
-    if (!this.config.runtimeCommand) {
-      throw new Error("RUNTIME_COMMAND is required for cli runtime.");
+    if (!this.config.command) {
+      throw new Error("Agent command is required for cli runtime.");
     }
 
     eventBus.emit({
       executionId,
+      channelId: message.channelId,
       chatId: message.chatId,
       type: "start",
       timestamp: Date.now()
     });
 
     return new Promise((resolve, reject) => {
-      const child = spawn(this.config.runtimeCommand as string, {
-        cwd: this.config.runtimeWorkingDir,
+      const child = spawn(this.config.command, this.config.args || [], {
+        cwd: this.config.workingDir,
         shell: true,
-        env: process.env
+        env: {
+          ...process.env,
+          ...(this.config.env || {})
+        }
       });
 
       const timeout: NodeJS.Timeout = setTimeout(() => {
         child.kill("SIGKILL");
         eventBus.emit({
           executionId,
+          channelId: message.channelId,
           chatId: message.chatId,
           type: "error",
           timestamp: Date.now(),
           payload: { reason: "Runtime timeout." }
         });
         reject(new Error("Runtime timeout."));
-      }, this.config.runtimeTimeoutMs);
+      }, this.config.timeoutMs ?? 10 * 60 * 1000);
 
       child.stdout?.on("data", (chunk: Buffer) => {
         eventBus.emit({
           executionId,
+          channelId: message.channelId,
           chatId: message.chatId,
           type: "stdout",
           timestamp: Date.now(),
@@ -52,6 +58,7 @@ export class CliRuntime implements Runtime {
       child.stderr?.on("data", (chunk: Buffer) => {
         eventBus.emit({
           executionId,
+          channelId: message.channelId,
           chatId: message.chatId,
           type: "stderr",
           timestamp: Date.now(),
@@ -63,6 +70,7 @@ export class CliRuntime implements Runtime {
         clearTimeout(timeout);
         eventBus.emit({
           executionId,
+          channelId: message.channelId,
           chatId: message.chatId,
           type: "error",
           timestamp: Date.now(),
@@ -75,6 +83,7 @@ export class CliRuntime implements Runtime {
         clearTimeout(timeout);
         eventBus.emit({
           executionId,
+          channelId: message.channelId,
           chatId: message.chatId,
           type: "complete",
           timestamp: Date.now(),
@@ -89,7 +98,7 @@ export class CliRuntime implements Runtime {
         child.stdin.end();
       }
 
-      this.logger.info("Spawned CLI runtime.", { executionId, command: this.config.runtimeCommand });
+      this.logger.info("Spawned CLI runtime.", { executionId, command: this.config.command });
     });
   }
 }

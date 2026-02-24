@@ -6,6 +6,7 @@ export class MockRuntime implements Runtime {
   async execute(message: IMMessage, executionId: string, eventBus: EventBus): Promise<void> {
     eventBus.emit({
       executionId,
+      channelId: message.channelId,
       chatId: message.chatId,
       type: "start",
       timestamp: Date.now()
@@ -13,6 +14,7 @@ export class MockRuntime implements Runtime {
 
     eventBus.emit({
       executionId,
+      channelId: message.channelId,
       chatId: message.chatId,
       type: "stdout",
       timestamp: Date.now(),
@@ -21,6 +23,7 @@ export class MockRuntime implements Runtime {
 
     eventBus.emit({
       executionId,
+      channelId: message.channelId,
       chatId: message.chatId,
       type: "complete",
       timestamp: Date.now()

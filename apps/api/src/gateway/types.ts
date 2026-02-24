@@ -1,4 +1,5 @@
 export interface IMMessage {
+  channelId: string;
   chatId: string;
   userId?: string;
   text: string;
@@ -6,6 +7,7 @@ export interface IMMessage {
 }
 
 export interface IMAdapter {
+  id: string;
   start: (onMessage: (message: IMMessage) => void) => Promise<void>;
   sendMessage: (chatId: string, text: string) => Promise<void>;
   stop: () => Promise<void>;

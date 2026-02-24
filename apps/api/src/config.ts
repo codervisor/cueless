@@ -23,17 +23,29 @@ export const loadEnv = (): void => {
   }
 };
 
-export type RuntimeType = "mock" | "cli";
-export type IMProvider = "telegram" | "mock";
+export type ChannelType = "telegram" | "slack" | "discord";
+
+export interface ChannelConfig {
+  type: ChannelType;
+  id: string;
+  defaultAgent?: string;
+  pollingInterval?: number;
+  [key: string]: unknown;
+}
+
+export interface AgentConfig {
+  name: string;
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+  workingDir?: string;
+  timeoutMs?: number;
+}
 
 export interface Config {
-  imProvider: IMProvider;
-  telegramToken?: string;
-  telegramPollingInterval: number;
-  runtimeType: RuntimeType;
-  runtimeCommand?: string;
-  runtimeWorkingDir?: string;
-  runtimeTimeoutMs: number;
+  channels: ChannelConfig[];
+  agents: AgentConfig[];
+  defaultAgent?: string;
   logLevel: "debug" | "info" | "warn" | "error";
 }
 
@@ -50,29 +62,72 @@ const parseLogLevel = (value?: string): Config["logLevel"] => {
   }
 };
 
-const parseRuntimeType = (value?: string): RuntimeType => {
-  return value === "cli" ? "cli" : "mock";
+const parseJson = <T>(raw: string | undefined): T | undefined => {
+  if (!raw) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return undefined;
+  }
 };
 
-const parseImProvider = (value?: string): IMProvider => {
-  return value === "mock" ? "mock" : "telegram";
+const parseChannels = (): ChannelConfig[] => {
+  const fromJson = parseJson<ChannelConfig[]>(process.env.CHANNELS_JSON);
+  if (fromJson && Array.isArray(fromJson) && fromJson.length > 0) {
+    return fromJson;
+  }
+
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const id = process.env.TELEGRAM_CHANNEL_ID;
+  const pollingInterval = Number(process.env.TELEGRAM_POLLING_INTERVAL || 300);
+
+  if (!token) {
+    return [];
+  }
+
+  if (!id) {
+    throw new Error("TELEGRAM_CHANNEL_ID is required when TELEGRAM_BOT_TOKEN is set.");
+  }
+
+  return [{
+    type: "telegram",
+    id,
+    token,
+    pollingInterval: Number.isFinite(pollingInterval) ? pollingInterval : 300
+  }];
+};
+
+const parseAgents = (): AgentConfig[] => {
+  const fromJson = parseJson<AgentConfig[]>(process.env.AGENTS_JSON);
+  if (fromJson && Array.isArray(fromJson) && fromJson.length > 0) {
+    return fromJson;
+  }
+
+  const command = process.env.RUNTIME_COMMAND;
+  if (!command) {
+    return [];
+  }
+
+  const timeoutMs = Number(process.env.RUNTIME_TIMEOUT_MS || 10 * 60 * 1000);
+  return [{
+    name: process.env.DEFAULT_AGENT || "default",
+    command,
+    workingDir: process.env.RUNTIME_WORKING_DIR,
+    timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 10 * 60 * 1000
+  }];
 };
 
 export const loadConfig = (): Config => {
   // Load .env files before accessing process.env
   loadEnv();
 
-  const runtimeTimeoutMs = Number(process.env.RUNTIME_TIMEOUT_MS || 10 * 60 * 1000);
-  const telegramPollingInterval = Number(process.env.TELEGRAM_POLLING_INTERVAL || 300);
-
   return {
-    imProvider: parseImProvider(process.env.IM_PROVIDER),
-    telegramToken: process.env.TELEGRAM_BOT_TOKEN,
-    telegramPollingInterval: Number.isFinite(telegramPollingInterval) ? telegramPollingInterval : 300,
-    runtimeType: parseRuntimeType(process.env.RUNTIME_TYPE),
-    runtimeCommand: process.env.RUNTIME_COMMAND,
-    runtimeWorkingDir: process.env.RUNTIME_WORKING_DIR,
-    runtimeTimeoutMs: Number.isFinite(runtimeTimeoutMs) ? runtimeTimeoutMs : 10 * 60 * 1000,
+    channels: parseChannels(),
+    agents: parseAgents(),
+    defaultAgent: process.env.DEFAULT_AGENT,
     logLevel: parseLogLevel(process.env.LOG_LEVEL)
   };
 };

@@ -6,6 +6,7 @@ export class TelegramAdapter implements IMAdapter {
   private bot?: TelegramBot;
 
   constructor(
+    public readonly id: string,
     private readonly token: string,
     private readonly pollingInterval: number,
     private readonly logger: Logger
@@ -21,17 +22,18 @@ export class TelegramAdapter implements IMAdapter {
       }
 
       const payload: IMMessage = {
+        channelId: this.id,
         chatId: String(message.chat.id),
         userId: message.from ? String(message.from.id) : undefined,
         text: message.text,
         raw: message
       };
 
-      this.logger.debug("Telegram message received.", { chatId: payload.chatId });
+      this.logger.debug("Telegram message received.", { channelId: this.id, chatId: payload.chatId });
       onMessage(payload);
     });
 
-    this.logger.info("Telegram adapter started.");
+    this.logger.info("Telegram adapter started.", { channelId: this.id });
   }
 
   async sendMessage(chatId: string, text: string): Promise<void> {
@@ -46,6 +48,6 @@ export class TelegramAdapter implements IMAdapter {
       return;
     }
     await this.bot.stopPolling();
-    this.logger.info("Telegram adapter stopped.");
+    this.logger.info("Telegram adapter stopped.", { channelId: this.id });
   }
 }

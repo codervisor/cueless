@@ -2,6 +2,7 @@ export type ExecutionEventType = "start" | "stdout" | "stderr" | "complete" | "e
 
 export interface ExecutionEvent {
   executionId: string;
+  channelId: string;
   chatId: string;
   type: ExecutionEventType;
   timestamp: number;

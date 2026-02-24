@@ -1,16 +1,23 @@
 ---
-status: planned
-created: '2026-02-24'
-tags:
-  - architecture
-  - hub
-  - multi-channel
-  - agent-runtime
+status: complete
+created: 2026-02-24
 priority: high
+tags:
+- architecture
+- hub
+- multi-channel
+- agent-runtime
 depends_on:
-  - 001-bootstrap-cueless
-  - 005-cli-daemon-service-mode
-created_at: '2026-02-24T04:37:33.701617+00:00'
+- 001-bootstrap-cueless
+- 005-cli-daemon-service-mode
+created_at: 2026-02-24T04:37:33.701617Z
+updated_at: 2026-02-24T05:41:34.557762Z
+completed_at: 2026-02-24T05:41:34.557762Z
+transitions:
+- status: in-progress
+  at: 2026-02-24T05:41:10.645360Z
+- status: complete
+  at: 2026-02-24T05:41:34.557762Z
 ---
 
 # Multi-Channel Agent Hub
@@ -225,32 +232,32 @@ This allows per-channel agent assignment and per-message overrides without chang
 
 ## Plan
 
-- [ ] Update `IMMessage` type: add `channelId` field
-- [ ] Update `ExecutionEvent` type: add `channelId` field
-- [ ] Update `IMAdapter` interface: add `id` field
-- [ ] Update `TelegramAdapter`: accept `id` from constructor (from `ChannelConfig.id`), populate `channelId` in messages
-- [ ] Create `AgentRegistry` (`/src/hub/agentRegistry.ts`)
-- [ ] Create `Router` interface + default implementation (`/src/hub/router.ts`)
-- [ ] Create `ChannelHub` (`/src/hub/hub.ts`): multi-adapter lifecycle + event routing
-- [ ] Update `Config` schema: `channels[]` (with required `id`) and `agents[]` replacing single-adapter/runtime fields
-- [ ] Add startup validation: `ChannelHub` throws if any two `ChannelConfig` entries share the same `id`
-- [ ] Update `createRuntime` factory: read `agents[]` from config and populate `AgentRegistry`
-- [ ] Update `index.ts` / `startDaemon()`: wire `ChannelHub` instead of `Gateway`
-- [ ] Update CLI runtime adapter to accept `AgentConfig` (command + args + env)
-- [ ] Update tests and mocks: add `channelId` to fixtures
+- [x] Update `IMMessage` type: add `channelId` field
+- [x] Update `ExecutionEvent` type: add `channelId` field
+- [x] Update `IMAdapter` interface: add `id` field
+- [x] Update `TelegramAdapter`: accept `id` from constructor (from `ChannelConfig.id`), populate `channelId` in messages
+- [x] Create `AgentRegistry` (`/src/hub/agentRegistry.ts`)
+- [x] Create `Router` interface + default implementation (`/src/hub/router.ts`)
+- [x] Create `ChannelHub` (`/src/hub/hub.ts`): multi-adapter lifecycle + event routing
+- [x] Update `Config` schema: `channels[]` (with required `id`) and `agents[]` replacing single-adapter/runtime fields
+- [x] Add startup validation: `ChannelHub` throws if any two `ChannelConfig` entries share the same `id`
+- [x] Update `createRuntime` factory: read `agents[]` from config and populate `AgentRegistry`
+- [x] Update `index.ts` / `startDaemon()`: wire `ChannelHub` instead of `Gateway`
+- [x] Update CLI runtime adapter to accept `AgentConfig` (command + args + env)
+- [x] Update tests and mocks: add `channelId` to fixtures
 
 ## Test
 
-- [ ] Single channel (Telegram) + single agent (existing behavior) works unchanged
-- [ ] Two adapters started concurrently; messages from each are delivered independently
-- [ ] Two Telegram bots (`telegram-personal`, `telegram-work`) run concurrently; events route back to the correct bot
-- [ ] `@claude` prefix routes to Claude runtime; `@gemini` routes to Gemini runtime
-- [ ] Channel-default agent assignment: `slack-work` defaults to `codex`, `telegram-personal` defaults to `claude`
-- [ ] Execution event `channelId` matches the originating adapter — response sent to correct channel
-- [ ] Unknown `@agent` prefix falls back to channel default / global default
-- [ ] `ChannelHub` throws on startup if two channel configs share the same `id`
-- [ ] `AgentRegistry.list()` returns all registered agent names
-- [ ] `ChannelHub.stop()` gracefully stops all adapters
+- [x] Single channel (Telegram) + single agent (existing behavior) works unchanged
+- [x] Two adapters started concurrently; messages from each are delivered independently
+- [x] Two Telegram bots (`telegram-personal`, `telegram-work`) run concurrently; events route back to the correct bot
+- [x] `@claude` prefix routes to Claude runtime; `@gemini` routes to Gemini runtime
+- [x] Channel-default agent assignment: `slack-work` defaults to `codex`, `telegram-personal` defaults to `claude`
+- [x] Execution event `channelId` matches the originating adapter — response sent to correct channel
+- [x] Unknown `@agent` prefix falls back to channel default / global default
+- [x] `ChannelHub` throws on startup if two channel configs share the same `id`
+- [x] `AgentRegistry.list()` returns all registered agent names
+- [x] `ChannelHub.stop()` gracefully stops all adapters
 
 ## Notes
 
