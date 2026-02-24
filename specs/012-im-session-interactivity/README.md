@@ -1,5 +1,5 @@
 ---
-status: planned
+status: complete
 created: 2026-02-24
 priority: high
 tags:
@@ -12,7 +12,13 @@ depends_on:
 - 011-session-runtime-foundation
 - 006-multi-channel-agent-hub
 created_at: 2026-02-24T08:17:35.015779Z
-updated_at: 2026-02-24T08:17:35.015779Z
+updated_at: 2026-02-24T09:05:46.870311Z
+completed_at: 2026-02-24T09:05:46.870311Z
+transitions:
+- status: in-progress
+  at: 2026-02-24T08:57:42.438962Z
+- status: complete
+  at: 2026-02-24T09:05:46.870311Z
 ---
 
 # IM Session Interactivity
@@ -252,10 +258,10 @@ Telegram msg → ChannelHub.handleMessage()
 
 ## Plan
 
-- [ ] Extend `CommandRunner` type and add `spawnAndStream` in `runtime/session/utils.ts`
-- [ ] Update `ClaudeSession`, `GeminiSession`, `CopilotSession` to pass `onChunk` to the runner
-- [ ] Implement `ChunkThrottler` in `hub/chunkThrottler.ts`
-- [ ] Implement `InMemoryExecutionRegistry` in `hub/executionRegistry.ts`
-- [ ] Wire `ExecutionRegistry` and `ChunkThrottler` into `ChannelHub` (`hub/hub.ts`): update `subscribeEvents()`, `handleMessage()`
-- [ ] Add `parseBuiltinCommand` and command-intercept logic in `ChannelHub.handleMessage()`
-- [ ] Unit tests: `spawnAndStream` streaming + fallback, `ChunkThrottler` coalescing + flush, `InMemoryExecutionRegistry` CRUD + TTL eviction + rolling buffer, `parseBuiltinCommand` parsing, hub command intercept routing
+- [x] Extend `CommandRunner` type and add `spawnAndStream` in `runtime/session/utils.ts`
+- [x] Update `ClaudeSession`, `GeminiSession`, `CopilotSession` to pass `onChunk` to the runner
+- [x] Implement `ChunkThrottler` in `hub/chunkThrottler.ts`
+- [x] Implement `InMemoryExecutionRegistry` in `hub/executionRegistry.ts`
+- [x] Wire `ExecutionRegistry` and `ChunkThrottler` into `ChannelHub` (`hub/hub.ts`): update `subscribeEvents()`, `handleMessage()`
+- [x] Add `parseBuiltinCommand` and command-intercept logic in `ChannelHub.handleMessage()`
+- [x] Unit tests: `spawnAndStream` streaming + fallback, `ChunkThrottler` coalescing + flush, `InMemoryExecutionRegistry` CRUD + TTL eviction + rolling buffer, `parseBuiltinCommand` parsing, hub command intercept routing

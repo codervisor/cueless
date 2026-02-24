@@ -19,6 +19,15 @@ export class SessionRuntime implements Runtime {
       this.config.name
     );
 
+    eventBus.emit({
+      executionId,
+      channelId: message.channelId,
+      chatId: message.chatId,
+      type: "start",
+      timestamp: Date.now(),
+      payload: { agentName: this.config.name }
+    });
+
     const response = await session.send(message.text, executionId, eventBus);
 
     eventBus.emit({

@@ -18,7 +18,8 @@ export class CliRuntime implements Runtime {
       channelId: message.channelId,
       chatId: message.chatId,
       type: "start",
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      payload: { agentName: this.config.name }
     });
 
     return new Promise((resolve, reject) => {

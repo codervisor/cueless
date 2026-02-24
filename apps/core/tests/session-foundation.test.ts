@@ -78,7 +78,7 @@ test("InMemorySessionManager evicts idle sessions after TTL", async () => {
 
 test("SessionRuntime emits aggregated complete response", async () => {
   const logger = createLogger("error");
-  const events: Array<{ type: string; response?: string }> = [];
+  const events: Array<{ type: string; response?: string; agentName?: string }> = [];
   const eventBus = new EventBus();
   const session = new FakeSession("s-1", "telegram", "chat-1", "aggregated response");
 
@@ -95,12 +95,19 @@ test("SessionRuntime emits aggregated complete response", async () => {
   }, manager, logger);
 
   eventBus.on((event) => {
-    events.push({ type: event.type, response: event.payload?.response });
+    events.push({
+      type: event.type,
+      response: event.payload?.response,
+      agentName: event.payload?.agentName
+    });
   });
 
   await runtime.execute({ channelId: "telegram", chatId: "chat-1", text: "hello" }, "exec-1", eventBus);
 
-  assert.deepEqual(events, [{ type: "complete", response: "aggregated response" }]);
+  assert.deepEqual(events, [
+    { type: "start", response: undefined, agentName: "claude" },
+    { type: "complete", response: "aggregated response", agentName: undefined }
+  ]);
 });
 
 test("createRuntime keeps CLI runtime default and dispatches session runtime", () => {

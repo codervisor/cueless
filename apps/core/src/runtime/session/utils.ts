@@ -13,7 +13,8 @@ export type CommandRunner = (
     cwd?: string;
     env?: Record<string, string>;
     timeoutMs?: number;
-  }
+  },
+  onChunk?: (type: "stdout" | "stderr", text: string) => void
 ) => Promise<CommandResult>;
 
 export const stripAnsi = (text: string): string => {
@@ -62,6 +63,49 @@ export const spawnAndCollect: CommandRunner = async (command, args, options) => 
 
     child.stderr?.on("data", (chunk: Buffer) => {
       stderr += chunk.toString();
+    });
+
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+
+    child.on("close", (code) => {
+      clearTimeout(timeout);
+      resolve({ stdout, stderr, code });
+    });
+  });
+};
+
+export const spawnAndStream: CommandRunner = async (command, args, options, onChunk) => {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: options?.cwd,
+      shell: true,
+      env: {
+        ...process.env,
+        ...(options?.env || {})
+      }
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    const timeout = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(new Error("Runtime timeout."));
+    }, options?.timeoutMs ?? 10 * 60 * 1000);
+
+    child.stdout?.on("data", (chunk: Buffer) => {
+      const text = chunk.toString();
+      stdout += text;
+      onChunk?.("stdout", text);
+    });
+
+    child.stderr?.on("data", (chunk: Buffer) => {
+      const text = chunk.toString();
+      stderr += text;
+      onChunk?.("stderr", text);
     });
 
     child.on("error", (error) => {

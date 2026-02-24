@@ -11,5 +11,6 @@ export interface ExecutionEvent {
     code?: number | null;
     reason?: string;
     response?: string;
+    agentName?: string;
   };
 }

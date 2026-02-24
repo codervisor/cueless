@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { AgentConfig } from "../../config";
 import { EventBus } from "../../events/eventBus";
 import { AgentSession, TranscriptSessionState, TranscriptTurn } from "./types";
-import { CommandRunner, spawnAndCollect, stripAnsi } from "./utils";
+import { CommandRunner, spawnAndStream, stripAnsi } from "./utils";
 
 const DEFAULT_MAX_TURNS = 10;
 
@@ -26,10 +26,10 @@ export class CopilotSession implements AgentSession {
     readonly channelId: string,
     readonly chatId: string,
     private readonly config: AgentConfig,
-    private readonly run: CommandRunner = spawnAndCollect
+    private readonly run: CommandRunner = spawnAndStream
   ) { }
 
-  async send(userText: string, _executionId: string, _eventBus: EventBus): Promise<string> {
+  async send(userText: string, executionId: string, eventBus: EventBus): Promise<string> {
     const prompt = buildPrompt(this.state.turns, userText);
 
     const args = [
@@ -38,11 +38,25 @@ export class CopilotSession implements AgentSession {
       prompt
     ];
 
-    const result = await this.run(this.config.command, args, {
-      cwd: this.config.workingDir,
-      env: this.config.env,
-      timeoutMs: this.config.timeoutMs
-    });
+    const result = await this.run(
+      this.config.command,
+      args,
+      {
+        cwd: this.config.workingDir,
+        env: this.config.env,
+        timeoutMs: this.config.timeoutMs
+      },
+      (type, text) => {
+        eventBus.emit({
+          executionId,
+          channelId: this.channelId,
+          chatId: this.chatId,
+          type,
+          timestamp: Date.now(),
+          payload: { text }
+        });
+      }
+    );
 
     if (result.code !== 0) {
       throw new Error(result.stderr || `Copilot command exited with code ${result.code ?? "unknown"}.`);
