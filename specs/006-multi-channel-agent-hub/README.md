@@ -107,12 +107,14 @@ export interface ExecutionEvent {
 
 ```ts
 export interface IMAdapter {
-  id: string;          // NEW: stable identifier, e.g. "telegram", "slack"
+  id: string;          // NEW: unique instance identifier, e.g. "telegram-personal", "slack-work"
   start: (onMessage: (message: IMMessage) => void) => Promise<void>;
   sendMessage: (chatId: string, text: string) => Promise<void>;
   stop: () => Promise<void>;
 }
 ```
+
+`id` is set from `ChannelConfig.id` (see config schema). It must be unique across all configured channels — the `ChannelHub` enforces this at startup and throws if two entries share the same `id`.
 
 ### New Components
 
@@ -166,8 +168,8 @@ export interface Router {
 
 ```ts
 export interface ChannelConfig {
-  type: "telegram" | "slack" | "discord";   // adapter type
-  id?: string;                               // override adapter id (defaults to type)
+  type: "telegram" | "slack" | "discord";   // adapter type (determines which class to instantiate)
+  id: string;                                // unique instance name — REQUIRED, no default
   defaultAgent?: string;                     // runtime name for this channel
   // adapter-specific options (token, etc.)
   [key: string]: unknown;
@@ -187,6 +189,30 @@ export interface Config {
 }
 ```
 
+#### Why `id` is required (not optional, not defaulting to `type`)
+
+A single `type` (e.g. `telegram`) can appear multiple times — personal bot, work bot, test bot. Defaulting `id` to `type` silently produces duplicate keys, which would cause the hub to overwrite one adapter with another or route events to the wrong bot. Making `id` required and unique-enforced surfaces the misconfiguration immediately.
+
+Example config with two Telegram bots:
+
+```yaml
+channels:
+  - type: telegram
+    id: telegram-personal
+    token: "${TELEGRAM_TOKEN_PERSONAL}"
+    defaultAgent: claude
+  - type: telegram
+    id: telegram-work
+    token: "${TELEGRAM_TOKEN_WORK}"
+    defaultAgent: codex
+  - type: slack
+    id: slack-work
+    appToken: "${SLACK_APP_TOKEN}"
+    defaultAgent: gemini
+```
+
+The adapter factory reads `config.id` and passes it directly to the `IMAdapter` constructor — no inference, no defaults.
+
 ### Routing Strategy Decision
 
 The default routing order is:
@@ -202,11 +228,12 @@ This allows per-channel agent assignment and per-message overrides without chang
 - [ ] Update `IMMessage` type: add `channelId` field
 - [ ] Update `ExecutionEvent` type: add `channelId` field
 - [ ] Update `IMAdapter` interface: add `id` field
-- [ ] Update `TelegramAdapter`: set `id = "telegram"`, populate `channelId` in messages
+- [ ] Update `TelegramAdapter`: accept `id` from constructor (from `ChannelConfig.id`), populate `channelId` in messages
 - [ ] Create `AgentRegistry` (`/src/hub/agentRegistry.ts`)
 - [ ] Create `Router` interface + default implementation (`/src/hub/router.ts`)
 - [ ] Create `ChannelHub` (`/src/hub/hub.ts`): multi-adapter lifecycle + event routing
-- [ ] Update `Config` schema: `channels[]` and `agents[]` replacing single-adapter/runtime fields
+- [ ] Update `Config` schema: `channels[]` (with required `id`) and `agents[]` replacing single-adapter/runtime fields
+- [ ] Add startup validation: `ChannelHub` throws if any two `ChannelConfig` entries share the same `id`
 - [ ] Update `createRuntime` factory: read `agents[]` from config and populate `AgentRegistry`
 - [ ] Update `index.ts` / `startDaemon()`: wire `ChannelHub` instead of `Gateway`
 - [ ] Update CLI runtime adapter to accept `AgentConfig` (command + args + env)
@@ -216,10 +243,12 @@ This allows per-channel agent assignment and per-message overrides without chang
 
 - [ ] Single channel (Telegram) + single agent (existing behavior) works unchanged
 - [ ] Two adapters started concurrently; messages from each are delivered independently
+- [ ] Two Telegram bots (`telegram-personal`, `telegram-work`) run concurrently; events route back to the correct bot
 - [ ] `@claude` prefix routes to Claude runtime; `@gemini` routes to Gemini runtime
-- [ ] Channel-default agent assignment: channel `slack` defaults to `codex`, channel `telegram` defaults to `claude`
+- [ ] Channel-default agent assignment: `slack-work` defaults to `codex`, `telegram-personal` defaults to `claude`
 - [ ] Execution event `channelId` matches the originating adapter — response sent to correct channel
 - [ ] Unknown `@agent` prefix falls back to channel default / global default
+- [ ] `ChannelHub` throws on startup if two channel configs share the same `id`
 - [ ] `AgentRegistry.list()` returns all registered agent names
 - [ ] `ChannelHub.stop()` gracefully stops all adapters
 
@@ -227,5 +256,5 @@ This allows per-channel agent assignment and per-message overrides without chang
 
 - The existing `Gateway` class should be preserved or aliased during migration to avoid breaking the daemon/service layer in spec 005.
 - Future: routing strategy could be extended to a config-driven rule engine (regex on message text, user allowlist, round-robin load balancing).
-- Future: `channelId` could encode multi-instance channels, e.g. `telegram-personal` vs `telegram-work` if the same provider is configured twice.
+- Multiple instances of the same adapter type are explicitly supported via the required `id` field — no special case or suffix magic needed.
 - Agent CLI runtimes (Claude Code, Gemini CLI, opencode, etc.) are still spawned as subprocesses — the `CliRuntime` pattern from spec 001 is preserved; only the registry and dispatch layer is new.
