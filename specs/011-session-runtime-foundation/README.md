@@ -1,15 +1,19 @@
 ---
-status: planned
+status: complete
 created: 2026-02-24
 priority: high
 tags:
 - agent-runtime
 - session
-parent: 007-agent-session-runtime
 depends_on:
 - 006-multi-channel-agent-hub
+parent: 007-agent-session-runtime
 created_at: 2026-02-24T06:48:34.888516Z
-updated_at: 2026-02-24T06:48:34.888516Z
+updated_at: 2026-02-24T07:03:51.151343Z
+completed_at: 2026-02-24T07:03:51.151343Z
+transitions:
+- status: complete
+  at: 2026-02-24T07:03:51.151343Z
 ---
 
 # Session Runtime Foundation
@@ -129,17 +133,17 @@ When `runtime` is absent or `"cli"`, the existing `CliRuntime` is used unchanged
 
 ## Plan
 
-- [ ] Define `AgentSession`, `NativeSessionState`, `TranscriptSessionState`, and `SessionManager` interfaces in `runtime/session/types.ts`
-- [ ] Implement `InMemorySessionManager` with TTL-based idle eviction
-- [ ] Implement `SessionRuntime` wiring `SessionManager` into the `Runtime` interface
-- [ ] Extend `AgentConfig` with `runtime` and `sessionTimeoutMs` fields
-- [ ] Update `createRuntime` factory in `runtime/index.ts` to dispatch on `runtime` type
-- [ ] Update `ChannelHub` to suppress per-chunk messages for session-backed executions and send the aggregated `complete.response` instead
-- [ ] Add unit tests for `SessionManager` TTL eviction and `SessionRuntime` dispatch
+- [x] Define `AgentSession`, `NativeSessionState`, `TranscriptSessionState`, and `SessionManager` interfaces in `runtime/session/types.ts`
+- [x] Implement `InMemorySessionManager` with TTL-based idle eviction
+- [x] Implement `SessionRuntime` wiring `SessionManager` into the `Runtime` interface
+- [x] Extend `AgentConfig` with `runtime` and `sessionTimeoutMs` fields
+- [x] Update `createRuntime` factory in `runtime/index.ts` to dispatch on `runtime` type
+- [x] Update `ChannelHub` to suppress per-chunk messages for session-backed executions and send the aggregated `complete.response` instead
+- [x] Add unit tests for `SessionManager` TTL eviction and `SessionRuntime` dispatch
 
 ## Test
 
-- [ ] Two messages on the same `channelId+chatId` reuse the same `AgentSession` (no new process spawned for the second message)
-- [ ] Idle session is evicted after `sessionTimeoutMs` and a fresh session begins on the next message
-- [ ] A single agent response produces exactly one IM message (no per-chunk spam)
-- [ ] `CliRuntime` continues to work unchanged when `runtime` is absent or `"cli"`
+- [x] Two messages on the same `channelId+chatId` reuse the same `AgentSession` (no new process spawned for the second message)
+- [x] Idle session is evicted after `sessionTimeoutMs` and a fresh session begins on the next message
+- [x] A single agent response produces exactly one IM message (no per-chunk spam)
+- [x] `CliRuntime` continues to work unchanged when `runtime` is absent or `"cli"`

@@ -1,16 +1,20 @@
 ---
-status: planned
+status: complete
 created: 2026-02-24
 priority: medium
 tags:
 - agent-runtime
 - session
 - copilot
-parent: 007-agent-session-runtime
 depends_on:
 - 011-session-runtime-foundation
+parent: 007-agent-session-runtime
 created_at: 2026-02-24T06:35:01.720490Z
-updated_at: 2026-02-24T06:35:01.720490Z
+updated_at: 2026-02-24T07:04:05.529388Z
+completed_at: 2026-02-24T07:04:05.529388Z
+transitions:
+- status: complete
+  at: 2026-02-24T07:04:05.529388Z
 ---
 
 # Copilot CLI Session Integration
@@ -75,17 +79,17 @@ The `-t shell` flag is the default. `AgentConfig` can carry an optional `copilot
 
 ## Plan
 
-- [ ] Implement `CopilotSession` in `runtime/session/copilotSession.ts`
-- [ ] Add `buildPrompt` helper that formats the transcript + latest message into a single string
-- [ ] Add `maxTurns` option (default 10) to cap transcript size
-- [ ] Register `"session-copilot"` in the `createRuntime` factory (from spec 007)
-- [ ] Add optional `copilotTargetType` field to `AgentConfig`
-- [ ] Add unit tests: transcript accumulation, pruning at `maxTurns`, correct `gh copilot suggest` args
+- [x] Implement `CopilotSession` in `runtime/session/copilotSession.ts`
+- [x] Add `buildPrompt` helper that formats the transcript + latest message into a single string
+- [x] Add `maxTurns` option (default 10) to cap transcript size
+- [x] Register `"session-copilot"` in the `createRuntime` factory (from spec 007)
+- [x] Add optional `copilotTargetType` field to `AgentConfig`
+- [x] Add unit tests: transcript accumulation, pruning at `maxTurns`, correct `gh copilot suggest` args
 
 ## Test
 
-- [ ] First call invokes `gh copilot suggest -t shell "<message>"` with no prior context
-- [ ] Second call prepends the first turn pair to the prompt
-- [ ] After `maxTurns` turns, oldest turns are pruned and not included in subsequent prompts
-- [ ] Response text is stripped of ANSI codes before being stored in the transcript and returned
-- [ ] `copilotTargetType` of `"git"` changes `-t` flag to `git`
+- [x] First call invokes `gh copilot suggest -t shell "<message>"` with no prior context
+- [x] Second call prepends the first turn pair to the prompt
+- [x] After `maxTurns` turns, oldest turns are pruned and not included in subsequent prompts
+- [x] Response text is stripped of ANSI codes before being stored in the transcript and returned
+- [x] `copilotTargetType` of `"git"` changes `-t` flag to `git`

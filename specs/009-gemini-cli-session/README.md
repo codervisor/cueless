@@ -1,16 +1,20 @@
 ---
-status: planned
+status: complete
 created: 2026-02-24
 priority: medium
 tags:
 - agent-runtime
 - session
 - gemini
-parent: 007-agent-session-runtime
 depends_on:
 - 011-session-runtime-foundation
+parent: 007-agent-session-runtime
 created_at: 2026-02-24T06:34:36.395083Z
-updated_at: 2026-02-24T06:34:36.395083Z
+updated_at: 2026-02-24T07:04:05.523486Z
+completed_at: 2026-02-24T07:04:05.523486Z
+transitions:
+- status: complete
+  at: 2026-02-24T07:04:05.523486Z
 ---
 
 # Gemini CLI Session Integration
@@ -65,15 +69,15 @@ If `--chat-id <id>` fails (session expired or unavailable), `GeminiSession` fall
 
 ## Plan
 
-- [ ] Implement `GeminiSession` in `runtime/session/geminiSession.ts`
-- [ ] Add `parseChatId` helper to extract the chat ID from Gemini CLI stdout or response metadata
-- [ ] Register `"session-gemini"` in the `createRuntime` factory (from spec 007)
-- [ ] Add unit tests: first call builds correct args; second call includes `--chat-id <id>`; fallback on expired session
+- [x] Implement `GeminiSession` in `runtime/session/geminiSession.ts`
+- [x] Add `parseChatId` helper to extract the chat ID from Gemini CLI stdout or response metadata
+- [x] Register `"session-gemini"` in the `createRuntime` factory (from spec 007)
+- [x] Add unit tests: first call builds correct args; second call includes `--chat-id <id>`; fallback on expired session
 
 ## Test
 
-- [ ] First call to `GeminiSession.send()` invokes `gemini -p "<text>"` with no `--chat-id` flag
-- [ ] Second call includes `--chat-id <parsedChatId> -p "<text>"`
-- [ ] Chat ID is correctly parsed from a sample stdout fixture
-- [ ] ANSI codes are stripped from the returned response string
-- [ ] If `--chat-id` fails, `GeminiSession` retries as a fresh session and updates `nativeSessionId`
+- [x] First call to `GeminiSession.send()` invokes `gemini -p "<text>"` with no `--chat-id` flag
+- [x] Second call includes `--chat-id <parsedChatId> -p "<text>"`
+- [x] Chat ID is correctly parsed from a sample stdout fixture
+- [x] ANSI codes are stripped from the returned response string
+- [x] If `--chat-id` fails, `GeminiSession` retries as a fresh session and updates `nativeSessionId`

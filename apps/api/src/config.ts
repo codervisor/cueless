@@ -35,11 +35,15 @@ export interface ChannelConfig {
 
 export interface AgentConfig {
   name: string;
+  runtime?: "cli" | "session-claude" | "session-gemini" | "session-copilot";
   command: string;
   args?: string[];
   env?: Record<string, string>;
   workingDir?: string;
   timeoutMs?: number;
+  sessionTimeoutMs?: number;
+  copilotTargetType?: "shell" | "git" | "gh";
+  maxTurns?: number;
 }
 
 export interface Config {

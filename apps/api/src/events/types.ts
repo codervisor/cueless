@@ -10,5 +10,6 @@ export interface ExecutionEvent {
     text?: string;
     code?: number | null;
     reason?: string;
+    response?: string;
   };
 }

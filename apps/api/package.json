@@ -14,7 +14,8 @@
     "dev": "tsx src/cli.ts start",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/src/cli.js start",
-    "test": "tsx tests/e2e.ts",
+    "test": "tsx --test tests/*.test.ts && tsx tests/e2e.ts",
+    "test:unit": "tsx --test tests/*.test.ts",
     "test:e2e": "tsx tests/e2e.ts"
   },
   "dependencies": {

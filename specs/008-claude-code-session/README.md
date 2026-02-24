@@ -1,16 +1,20 @@
 ---
-status: planned
+status: complete
 created: 2026-02-24
 priority: medium
 tags:
 - agent-runtime
 - session
 - claude
-parent: 007-agent-session-runtime
 depends_on:
 - 011-session-runtime-foundation
+parent: 007-agent-session-runtime
 created_at: 2026-02-24T06:34:11.950438Z
-updated_at: 2026-02-24T06:34:11.950438Z
+updated_at: 2026-02-24T07:04:05.489989Z
+completed_at: 2026-02-24T07:04:05.489989Z
+transitions:
+- status: complete
+  at: 2026-02-24T07:04:05.489989Z
 ---
 
 # Claude Code Session Integration
@@ -70,16 +74,16 @@ If `--resume <id>` fails (e.g., the session has expired on Claude's side), `Clau
 
 ## Plan
 
-- [ ] Implement `ClaudeSession` in `runtime/session/claudeSession.ts`
-- [ ] Add `parseSessionId` helper to extract the native session ID from stdout (or `~/.claude/projects/`)
-- [ ] Add `stripAnsi` utility (or reuse if already present)
-- [ ] Register `"session-claude"` in the `createRuntime` factory (from spec 007)
-- [ ] Add unit tests: first call builds correct args; second call includes `--resume <id>`; fallback on expired session
+- [x] Implement `ClaudeSession` in `runtime/session/claudeSession.ts`
+- [x] Add `parseSessionId` helper to extract the native session ID from stdout (or `~/.claude/projects/`)
+- [x] Add `stripAnsi` utility (or reuse if already present)
+- [x] Register `"session-claude"` in the `createRuntime` factory (from spec 007)
+- [x] Add unit tests: first call builds correct args; second call includes `--resume <id>`; fallback on expired session
 
 ## Test
 
-- [ ] First call to `ClaudeSession.send()` invokes `claude -p "<text>"` with no `--resume` flag
-- [ ] Second call includes `--resume <parsedSessionId> -p "<text>"`
-- [ ] Session ID is correctly parsed from a sample stdout fixture
-- [ ] ANSI codes are stripped from the returned response string
-- [ ] If `--resume` fails, `ClaudeSession` retries as a fresh session and updates `nativeSessionId`
+- [x] First call to `ClaudeSession.send()` invokes `claude -p "<text>"` with no `--resume` flag
+- [x] Second call includes `--resume <parsedSessionId> -p "<text>"`
+- [x] Session ID is correctly parsed from a sample stdout fixture
+- [x] ANSI codes are stripped from the returned response string
+- [x] If `--resume` fails, `ClaudeSession` retries as a fresh session and updates `nativeSessionId`

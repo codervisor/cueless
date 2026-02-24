@@ -21,7 +21,7 @@ const formatEvent = (event: ExecutionEvent): string => {
     case "stderr":
       return `STDERR: ${truncate(event.payload?.text || "", 3500)}`;
     case "complete":
-      return "Execution complete.";
+      return event.payload?.response || "Execution complete.";
     case "error":
       return `Execution error: ${event.payload?.reason || "unknown"}`;
     default:
