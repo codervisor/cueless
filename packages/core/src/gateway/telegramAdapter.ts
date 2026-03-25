@@ -8,7 +8,6 @@ export class TelegramAdapter implements IMAdapter {
   constructor(
     public readonly id: string,
     private readonly token: string,
-    private readonly pollingInterval: number,
     private readonly logger: Logger
   ) { }
 

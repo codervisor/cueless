@@ -43,44 +43,21 @@ packages/
 
 ## Configuration
 
-Telegramable supports multi-channel and multi-agent setups via JSON environment variables, with legacy single-channel/agent fallbacks.
+Set environment variables in `.env` or your deployment platform (Railway, Docker, etc.).
 
-### Channels
-
-Configure one or more IM channels:
-
-```bash
-# Option A: JSON (multiple channels)
-CHANNELS_JSON='[{"type":"telegram","id":"my-telegram","token":"<BOT_TOKEN>","defaultAgent":"copilot"}]'
-
-# Option B: Single Telegram channel (legacy)
-TELEGRAM_BOT_TOKEN=<token>
-TELEGRAM_CHANNEL_ID=<id>
-```
-
-### Agents
-
-Configure one or more AI agents:
-
-```bash
-# Option A: JSON (multiple agents)
-AGENTS_JSON='[{"name":"copilot","runtime":"session-copilot","command":"copilot","timeoutMs":120000,"sessionTimeoutMs":1800000,"maxTurns":10}]'
-
-# Option B: Single agent (legacy)
-RUNTIME_COMMAND=copilot
-RUNTIME_WORKING_DIR=
-RUNTIME_TIMEOUT_MS=120000
-DEFAULT_AGENT=copilot
-```
+| Variable            | Default  | Description                        |
+| ------------------- | -------- | ---------------------------------- |
+| TELEGRAM_BOT_TOKEN  | -        | Telegram bot token (required)      |
+| TELEGRAM_CHANNEL_ID | -        | Channel identifier (required)      |
+| RUNTIME_COMMAND     | -        | Agent command (e.g., `copilot`)    |
+| RUNTIME_WORKING_DIR | -        | Working directory for the agent    |
+| RUNTIME_TIMEOUT_MS  | 600000   | Agent execution timeout in ms      |
+| DEFAULT_AGENT       | default  | Default agent name                 |
+| LOG_LEVEL           | info     | Log verbosity (`debug`, `info`, `warn`, `error`) |
 
 Supported runtimes: `cli`, `session-claude`, `session-claude-sdk`, `session-gemini`, `session-copilot`.
 
-### General
-
-| Variable       | Default | Description    |
-| -------------- | ------- | -------------- |
-| DEFAULT_AGENT  | -       | Default agent name |
-| LOG_LEVEL      | info    | Log verbosity (`debug`, `info`, `warn`, `error`) |
+Multi-channel and multi-agent setups will be managed via CLI commands (e.g., `telegramable channel add`, `telegramable agent add`) — see spec 018.
 
 ## Testing
 
