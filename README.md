@@ -74,18 +74,18 @@ pnpm test:e2e
 ### Docker
 
 ```bash
-docker build -f apps/cli/Dockerfile -t telegramable .
-docker run --env-file .env telegramable
+docker build -t telegramable .
+docker run --env-file .env -p 3000:3000 telegramable
 ```
+
+Both the CLI gateway and the web frontend run in the same container. The web UI is available on port 3000.
 
 ### Railway
 
 1. Create a new project on [Railway](https://railway.app) and connect the GitHub repo.
-2. In service settings:
-   - **Builder**: Dockerfile
-   - **Dockerfile Path**: `apps/cli/Dockerfile`
+2. Railway picks up `railway.toml` automatically — no manual settings needed.
 3. Add your environment variables (see [Configuration](#configuration) above).
-4. Deploy — Railway builds and runs the CLI gateway automatically.
+4. Deploy.
 
 Alternatively, use the Railway CLI:
 
@@ -94,5 +94,3 @@ railway login
 railway link
 railway up
 ```
-
-No additional config files (`railway.toml`, `Procfile`) are needed — Railway auto-detects the Dockerfile.
