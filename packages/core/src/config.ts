@@ -39,7 +39,6 @@ export interface ChannelConfig {
   type: ChannelType;
   id: string;
   defaultAgent?: string;
-  pollingInterval?: number;
   [key: string]: unknown;
 }
 
@@ -81,27 +80,9 @@ const parseLogLevel = (value?: string): Config["logLevel"] => {
   }
 };
 
-const parseJson = <T>(raw: string | undefined): T | undefined => {
-  if (!raw) {
-    return undefined;
-  }
-
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return undefined;
-  }
-};
-
 const parseChannels = (): ChannelConfig[] => {
-  const fromJson = parseJson<ChannelConfig[]>(process.env.CHANNELS_JSON);
-  if (fromJson && Array.isArray(fromJson) && fromJson.length > 0) {
-    return fromJson;
-  }
-
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const id = process.env.TELEGRAM_CHANNEL_ID;
-  const pollingInterval = Number(process.env.TELEGRAM_POLLING_INTERVAL || 300);
 
   if (!token) {
     return [];
@@ -111,20 +92,10 @@ const parseChannels = (): ChannelConfig[] => {
     throw new Error("TELEGRAM_CHANNEL_ID is required when TELEGRAM_BOT_TOKEN is set.");
   }
 
-  return [{
-    type: "telegram",
-    id,
-    token,
-    pollingInterval: Number.isFinite(pollingInterval) ? pollingInterval : 300
-  }];
+  return [{ type: "telegram", id, token }];
 };
 
 const parseAgents = (): AgentConfig[] => {
-  const fromJson = parseJson<AgentConfig[]>(process.env.AGENTS_JSON);
-  if (fromJson && Array.isArray(fromJson) && fromJson.length > 0) {
-    return fromJson;
-  }
-
   const command = process.env.RUNTIME_COMMAND;
   if (!command) {
     return [];

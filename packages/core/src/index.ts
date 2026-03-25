@@ -16,12 +16,7 @@ const createAdapter = (channel: ChannelConfig, logger: ReturnType<typeof createL
       throw new Error(`Telegram channel '${channel.id}' is missing token.`);
     }
 
-    const pollingInterval =
-      typeof channel.pollingInterval === "number" && Number.isFinite(channel.pollingInterval)
-        ? channel.pollingInterval
-        : 300;
-
-    return new TelegramAdapter(channel.id, channel.token, pollingInterval, logger);
+    return new TelegramAdapter(channel.id, channel.token, logger);
   }
 
   throw new Error(`Unsupported channel type '${channel.type}' for channel '${channel.id}'.`);
