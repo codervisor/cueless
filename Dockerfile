@@ -23,7 +23,7 @@ RUN pnpm --filter @telegramable/core build && \
     pnpm --filter @telegramable/web build
 
 # Create self-contained CLI bundle (resolves workspace symlinks)
-RUN pnpm deploy --filter @telegramable/cli --prod /deploy/cli
+RUN pnpm deploy --legacy --filter @telegramable/cli --prod /deploy/cli
 
 # ---- Run ----
 FROM node:22-alpine AS runner
