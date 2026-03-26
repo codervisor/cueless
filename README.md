@@ -48,7 +48,7 @@ Set environment variables in `.env` or your deployment platform (Railway, Docker
 | Variable            | Default  | Description                        |
 | ------------------- | -------- | ---------------------------------- |
 | TELEGRAM_BOT_TOKEN  | -        | Telegram bot token (required)      |
-| TELEGRAM_CHANNEL_ID | -        | Channel identifier (required)      |
+| TELEGRAM_CHANNEL_ID | telegram | Channel identifier (optional)      |
 | RUNTIME_COMMAND     | -        | Agent command (e.g., `copilot`)    |
 | RUNTIME_WORKING_DIR | -        | Working directory for the agent    |
 | RUNTIME_TIMEOUT_MS  | 600000   | Agent execution timeout in ms      |
