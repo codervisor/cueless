@@ -254,8 +254,8 @@ test("ChannelHub handles file-only messages (no text)", async () => {
   await sleep(50);
 
   // File messages should not be dropped (even with empty text)
-  // The hub should route them normally
-  assert.ok(adapter.sentMessages.some((m) => m.text.includes("Execution ID:")));
+  // The hub should route them to the runtime
+  assert.equal(receivedFileId, "file-abc-123", "runtime should receive the file ID");
 
   await hub.stop();
 });
