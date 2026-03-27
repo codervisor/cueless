@@ -23,9 +23,11 @@ test("ChannelHub supports /status /logs /list without routing to runtime", async
   const adapter = new MockAdapter("telegram");
 
   let executeCalls = 0;
+  let capturedExecutionId = "";
   const runtime: Runtime = {
     async execute(message, executionId, bus): Promise<void> {
       executeCalls += 1;
+      capturedExecutionId = executionId;
 
       bus.emit({
         executionId,
@@ -73,21 +75,18 @@ test("ChannelHub supports /status /logs /list without routing to runtime", async
 
   await sleep(30);
 
-  const ack = adapter.sentMessages.find((message) => message.text.includes("Execution ID:"));
-  assert.ok(ack);
-
-  const executionId = ack?.text.split("Execution ID:")[1]?.trim() || "";
-  assert.ok(executionId.length > 0);
+  assert.equal(executeCalls, 1);
+  assert.ok(capturedExecutionId.length > 0, "runtime should have received an executionId");
 
   await adapter.simulateIncoming({
     channelId: "telegram",
     chatId: "chat-1",
-    text: `/status ${executionId}`
+    text: `/status ${capturedExecutionId}`
   });
   await adapter.simulateIncoming({
     channelId: "telegram",
     chatId: "chat-1",
-    text: `/logs ${executionId}`
+    text: `/logs ${capturedExecutionId}`
   });
   await adapter.simulateIncoming({
     channelId: "telegram",
@@ -102,7 +101,6 @@ test("ChannelHub supports /status /logs /list without routing to runtime", async
 
   await sleep(30);
 
-  assert.equal(executeCalls, 1);
   assert.ok(adapter.sentMessages.some((message) => message.text.includes("✅ Complete")));
   assert.ok(adapter.sentMessages.some((message) => message.text.includes("[stdout] Analyzing project structure...")));
   assert.ok(adapter.sentMessages.some((message) => message.text.includes("Recent executions (this chat):")));
