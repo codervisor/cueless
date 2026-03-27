@@ -1,4 +1,5 @@
 import assert from "assert";
+import test from "node:test";
 import { EventBus } from "../src/events/eventBus";
 import { ChannelHub } from "../src/hub/hub";
 import { createLogger } from "../src/logging";
@@ -15,7 +16,7 @@ class MockRouter implements Router {
   }
 }
 
-const run = async () => {
+test("Hub integration: message flows through adapter → router → runtime without verbose output", async () => {
   const logger = createLogger("error");
   const adapter = new MockAdapter();
   const runtime = new MockRuntime();
@@ -42,9 +43,4 @@ const run = async () => {
   );
 
   await hub.stop();
-};
-
-run().catch((error) => {
-  console.error(error);
-  process.exit(1);
 });
