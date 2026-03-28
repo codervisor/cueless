@@ -1,4 +1,5 @@
 import { spawn } from "child_process";
+import { existsSync } from "fs";
 
 export interface CommandResult {
   stdout: string;
@@ -16,6 +17,18 @@ export type CommandRunner = (
   },
   onChunk?: (type: "stdout" | "stderr", text: string) => void
 ) => Promise<CommandResult>;
+
+const toSpawnError = (error: unknown, command: string, cwd?: string): Error => {
+  if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+    if (cwd && !existsSync(cwd)) {
+      return new Error(`Working directory not found: ${cwd}`);
+    }
+    return new Error(
+      `Command not found: "${command}". Ensure it is installed and available in PATH.`
+    );
+  }
+  return error instanceof Error ? error : new Error(String(error));
+};
 
 export const stripAnsi = (text: string): string => {
   return text.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "");
@@ -67,7 +80,7 @@ export const spawnAndCollect: CommandRunner = async (command, args, options) => 
 
     child.on("error", (error) => {
       clearTimeout(timeout);
-      reject(error);
+      reject(toSpawnError(error, command, options?.cwd));
     });
 
     child.on("close", (code) => {
@@ -110,7 +123,7 @@ export const spawnAndStream: CommandRunner = async (command, args, options, onCh
 
     child.on("error", (error) => {
       clearTimeout(timeout);
-      reject(error);
+      reject(toSpawnError(error, command, options?.cwd));
     });
 
     child.on("close", (code) => {
