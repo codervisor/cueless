@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { spawn } from "child_process";
+import { existsSync } from "fs";
 import { AgentConfig } from "../config";
 import { EventBus } from "../events/eventBus";
 import { IMMessage } from "../gateway/types";
@@ -159,17 +160,23 @@ export class CliRuntime implements Runtime {
         });
       });
 
-      child.on("error", (error: Error) => {
+      child.on("error", (error: NodeJS.ErrnoException) => {
         clearTimeout(timeout);
+        let reason = error.message;
+        if (error.code === "ENOENT") {
+          reason = this.config.workingDir && !existsSync(this.config.workingDir)
+            ? `Working directory not found: ${this.config.workingDir}`
+            : `Command not found: "${executable}". Ensure it is installed and available in PATH.`;
+        }
         eventBus.emit({
           executionId,
           channelId: message.channelId,
           chatId: message.chatId,
           type: "error",
           timestamp: Date.now(),
-          payload: { reason: error.message }
+          payload: { reason }
         });
-        reject(error);
+        reject(new Error(reason));
       });
 
       child.on("close", (code: number | null) => {

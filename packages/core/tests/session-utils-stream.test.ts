@@ -40,3 +40,29 @@ test("spawnAndStream returns aggregated output when callback omitted", async () 
   assert.equal(streamed.code, 0);
   assert.deepEqual(streamed, collected);
 });
+
+test("spawnAndCollect returns exit code 127 for missing command (shell mode)", async () => {
+  const result = await spawnAndCollect("nonexistent_cmd_abc123", [], { timeoutMs: 5_000 });
+  assert.equal(result.code, 127);
+  assert.match(result.stderr, /not found/);
+});
+
+test("spawnAndCollect rejects with cwd message when directory not found", async () => {
+  await assert.rejects(
+    () => spawnAndCollect("echo", ["hi"], { cwd: "/nonexistent_dir_xyz", timeoutMs: 5_000 }),
+    (error: Error) => {
+      assert.match(error.message, /Working directory not found/);
+      return true;
+    }
+  );
+});
+
+test("spawnAndStream rejects with cwd message when directory not found", async () => {
+  await assert.rejects(
+    () => spawnAndStream("echo", ["hi"], { cwd: "/nonexistent_dir_xyz", timeoutMs: 5_000 }),
+    (error: Error) => {
+      assert.match(error.message, /Working directory not found/);
+      return true;
+    }
+  );
+});

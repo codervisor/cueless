@@ -198,6 +198,27 @@ test("CliRuntime emits error event on timeout", async () => {
   assert.equal(error?.payload?.reason, "Runtime timeout.");
 });
 
+// ---------- command not found (ENOENT) ----------
+
+test("CliRuntime emits descriptive error when command is not found", async () => {
+  const config: AgentConfig = { name: "missing-agent", command: "nonexistent_cmd_abc123" };
+  const runtime = new CliRuntime(config, logger);
+  const eventBus = new EventBus();
+  const events = collect(eventBus);
+
+  await assert.rejects(
+    () => runtime.execute(msg(), "exec-enoent", eventBus),
+    (error: Error) => {
+      assert.match(error.message, /Command not found: "nonexistent_cmd_abc123"/);
+      return true;
+    }
+  );
+
+  const errorEvent = events.find((e) => e.type === "error");
+  assert.ok(errorEvent, "should emit error event");
+  assert.match(errorEvent!.payload!.reason as string, /Command not found/);
+});
+
 // ---------- missing command ----------
 
 test("CliRuntime throws when command is not configured", async () => {
