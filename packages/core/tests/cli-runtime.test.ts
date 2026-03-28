@@ -44,6 +44,20 @@ test("CliRuntime passes prompt as positional argument", async () => {
   assert.equal(complete?.payload?.response, "ping");
 });
 
+test("CliRuntime parses command string with embedded args", async () => {
+  // "echo --flag" should be split into executable "echo" with initialArg "--flag"
+  const config: AgentConfig = { name: "embed-agent", command: "echo --flag" };
+  const runtime = new CliRuntime(config, logger);
+  const eventBus = new EventBus();
+  const events = collect(eventBus);
+
+  await runtime.execute(msg({ text: "world" }), "exec-1b", eventBus);
+
+  const stdout = events.filter((e) => e.type === "stdout").map((e) => e.payload?.text).join("");
+  assert.ok(stdout.includes("--flag"), "should include initial arg from command string");
+  assert.ok(stdout.includes("world"), "should include prompt as positional arg");
+});
+
 test("CliRuntime captures stdout from command", async () => {
   // echo prints all its args — useful for verifying args are passed through
   const config: AgentConfig = { name: "hello-agent", command: "echo", args: ["hi"] };
