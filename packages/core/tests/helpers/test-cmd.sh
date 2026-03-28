@@ -12,7 +12,11 @@ shift
 
 case "$mode" in
   echo-stdin)    cat ;;
-  echo-last-arg) eval echo "\${$#}" ;;
+  echo-last-arg)
+    last=
+    for last; do :; done
+    printf '%s\n' "$last"
+    ;;
   stderr)        echo err >&2 ;;
   fail)          exit 1 ;;
   hang)          sleep 60 ;;

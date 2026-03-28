@@ -17,7 +17,10 @@ export class CliRuntime implements Runtime {
    * e.g. "claude --print" → { executable: "claude", initialArgs: ["--print"] }
    */
   private parseCommand(): { executable: string; initialArgs: string[] } {
-    const parts = this.config.command!.trim().split(/\s+/);
+    const parts = this.config.command!.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) {
+      throw new Error("Agent command is empty.");
+    }
     return { executable: parts[0], initialArgs: parts.slice(1) };
   }
 
