@@ -41,18 +41,15 @@ RUN apt-get update && \
 ENV PATH="/home/claude/.local/bin:/home/claude/.claude/local/bin:${PATH}"
 
 # Web — Next.js standalone output
-COPY --from=builder /app/apps/web/.next/standalone ./web/
-COPY --from=builder /app/apps/web/.next/static ./web/apps/web/.next/static
-COPY --from=builder /app/apps/web/public ./web/apps/web/public
+COPY --chown=claude:claude --from=builder /app/apps/web/.next/standalone ./web/
+COPY --chown=claude:claude --from=builder /app/apps/web/.next/static ./web/apps/web/.next/static
+COPY --chown=claude:claude --from=builder /app/apps/web/public ./web/apps/web/public
 
 # CLI — deployed bundle with all deps resolved
-COPY --from=builder /deploy/cli ./cli/
+COPY --chown=claude:claude --from=builder /deploy/cli ./cli/
 
-COPY start.sh ./
+COPY --chown=claude:claude start.sh ./
 RUN chmod +x ./start.sh
-
-# Ensure the non-root user owns the app directory
-RUN chown -R claude:claude /app
 
 EXPOSE 3000
 ENV PORT=3000

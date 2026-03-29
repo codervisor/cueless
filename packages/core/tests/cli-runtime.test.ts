@@ -278,6 +278,57 @@ test("CliRuntime passes config flags to the command", async () => {
   assert.ok(stdout.includes("--bare"), "should include --bare");
 });
 
+// ---------- root + bypassPermissions fallback ----------
+
+test("CliRuntime falls back bypassPermissions to auto when running as root", async () => {
+  const originalGetuid = process.getuid;
+  try {
+    // Simulate running as root (uid 0)
+    process.getuid = () => 0;
+
+    const config: AgentConfig = {
+      name: "root-agent",
+      command: "echo",
+      permissionMode: "bypassPermissions"
+    };
+    const runtime = new CliRuntime(config, logger);
+    const eventBus = new EventBus();
+    const events = collect(eventBus);
+
+    await runtime.execute(msg(), "exec-root", eventBus);
+
+    const stdout = events.filter((e) => e.type === "stdout").map((e) => e.payload?.text).join("");
+    assert.ok(stdout.includes("--permission-mode auto"), "should fall back to auto when root");
+    assert.ok(!stdout.includes("bypassPermissions"), "should not include bypassPermissions");
+  } finally {
+    process.getuid = originalGetuid;
+  }
+});
+
+test("CliRuntime keeps bypassPermissions when not root", async () => {
+  const originalGetuid = process.getuid;
+  try {
+    // Simulate running as non-root
+    process.getuid = () => 1000;
+
+    const config: AgentConfig = {
+      name: "nonroot-agent",
+      command: "echo",
+      permissionMode: "bypassPermissions"
+    };
+    const runtime = new CliRuntime(config, logger);
+    const eventBus = new EventBus();
+    const events = collect(eventBus);
+
+    await runtime.execute(msg(), "exec-nonroot", eventBus);
+
+    const stdout = events.filter((e) => e.type === "stdout").map((e) => e.payload?.text).join("");
+    assert.ok(stdout.includes("--permission-mode bypassPermissions"), "should keep bypassPermissions when not root");
+  } finally {
+    process.getuid = originalGetuid;
+  }
+});
+
 // ---------- event metadata ----------
 
 test("CliRuntime events carry correct channelId, chatId, executionId", async () => {
