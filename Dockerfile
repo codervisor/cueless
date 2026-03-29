@@ -32,7 +32,7 @@ ENV NODE_ENV=production
 
 # Install Claude Code CLI
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends bash curl ca-certificates && \
+    apt-get install -y --no-install-recommends curl ca-certificates && \
     curl -fsSL https://claude.ai/install.sh | bash && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 ENV PATH="/root/.local/bin:/root/.claude/local/bin:${PATH}"
