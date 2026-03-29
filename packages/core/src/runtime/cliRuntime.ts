@@ -5,18 +5,38 @@ import { AgentConfig } from "../config";
 import { EventBus } from "../events/eventBus";
 import { IMMessage } from "../gateway/types";
 import { Logger } from "../logging";
+import { MemoryStore } from "../memory";
+import { MemoryExtractor } from "../memory/extractor";
+import { MemorySync } from "../memory/sync";
 import { Runtime } from "./types";
 import { FileSessionStore } from "./session/fileSessionStore";
+
+export interface CliRuntimeOptions {
+  dataDir?: string;
+  /** Returns an additional system prompt section at call time (e.g. memory facts). */
+  getSystemPromptSuffix?: () => string;
+  memoryStore?: MemoryStore;
+  memorySync?: MemorySync;
+  memoryExtractor?: MemoryExtractor;
+}
 
 export class CliRuntime implements Runtime {
   /** Map of "channelId::chatId" → Claude CLI session ID for conversation continuity. */
   private readonly sessions = new Map<string, string>();
   private readonly fileStore?: FileSessionStore;
+  private readonly getSystemPromptSuffix?: () => string;
+  private readonly memoryStore?: MemoryStore;
+  private readonly memorySync?: MemorySync;
+  private readonly memoryExtractor?: MemoryExtractor;
 
-  constructor(private readonly config: AgentConfig, private readonly logger: Logger, dataDir?: string) {
-    if (dataDir) {
-      this.fileStore = new FileSessionStore(dataDir, "cli-sessions.json", logger);
+  constructor(private readonly config: AgentConfig, private readonly logger: Logger, options?: CliRuntimeOptions) {
+    if (options?.dataDir) {
+      this.fileStore = new FileSessionStore(options.dataDir, "cli-sessions.json", logger);
     }
+    this.getSystemPromptSuffix = options?.getSystemPromptSuffix;
+    this.memoryStore = options?.memoryStore;
+    this.memorySync = options?.memorySync;
+    this.memoryExtractor = options?.memoryExtractor;
   }
 
   /**
@@ -39,8 +59,9 @@ export class CliRuntime implements Runtime {
       args.push("--model", this.config.model);
     }
 
-    if (this.config.systemPrompt) {
-      args.push("--append-system-prompt", this.config.systemPrompt);
+    const systemPrompt = (this.config.systemPrompt || "") + (this.getSystemPromptSuffix?.() || "");
+    if (systemPrompt) {
+      args.push("--append-system-prompt", systemPrompt);
     }
 
     if (this.config.permissionMode) {
@@ -281,6 +302,12 @@ export class CliRuntime implements Runtime {
           timestamp: Date.now(),
           payload: { code: code ?? null, response: response || undefined }
         });
+
+        // Extract memories async — don't block
+        if (response && this.memoryExtractor && this.memoryStore && this.memorySync) {
+          void this.extractMemory(message.text, response);
+        }
+
         resolve();
       });
 
@@ -296,5 +323,53 @@ export class CliRuntime implements Runtime {
         cwd: this.config.workingDir || "(inherited)"
       });
     });
+  }
+
+  private async extractMemory(userText: string, response: string): Promise<void> {
+    try {
+      const conversation = `User: ${userText}\n\nAssistant: ${response}`;
+      const changes = await this.memoryExtractor!.extract(conversation, this.memoryStore!.all());
+
+      const hasChanges = changes.add.length > 0 || changes.update.length > 0 || changes.remove.length > 0;
+      if (!hasChanges) return;
+
+      const changelogParts: string[] = [];
+
+      for (const item of changes.add) {
+        const fact = this.memoryStore!.add(item.tag, item.text);
+        changelogParts.push(`➕ <code>${fact.id}</code> [${fact.tag}] ${fact.text}`);
+      }
+
+      for (const item of changes.update) {
+        if (this.memoryStore!.update(item.id, item.text)) {
+          changelogParts.push(`✏️ <code>${item.id}</code> → ${item.text}`);
+        }
+      }
+
+      for (const id of changes.remove) {
+        const fact = this.memoryStore!.get(id);
+        if (fact && this.memoryStore!.remove(id)) {
+          changelogParts.push(`🗑️ <code>${id}</code> ${fact.text}`);
+        }
+      }
+
+      await this.memorySync!.save(this.memoryStore!.snapshot());
+
+      if (changelogParts.length > 0) {
+        await this.memorySync!.sendChangelog(
+          `<b>🧠 Memory updated</b>\n\n${changelogParts.join("\n")}`
+        );
+      }
+
+      this.logger.info("Memory updated.", {
+        added: changes.add.length,
+        updated: changes.update.length,
+        removed: changes.remove.length,
+      });
+    } catch (err) {
+      this.logger.warn("Memory extraction failed.", {
+        reason: err instanceof Error ? err.message : "unknown",
+      });
+    }
   }
 }

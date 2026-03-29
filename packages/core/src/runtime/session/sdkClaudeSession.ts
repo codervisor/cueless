@@ -11,6 +11,8 @@ export interface SdkClaudeSessionOptions {
   allowedTools?: string[];
   maxBudgetUsd?: number;
   cwd?: string;
+  /** Additional system prompt section injected at query time (e.g. memory facts). */
+  getSystemPromptSuffix?: () => string;
 }
 
 /**
@@ -148,7 +150,7 @@ export class SdkClaudeSession implements AgentSession {
         options: {
           abortController,
           model: this.options.model || this.config.env?.CLAUDE_MODEL,
-          systemPrompt: this.options.systemPrompt,
+          systemPrompt: (this.options.systemPrompt || "") + (this.options.getSystemPromptSuffix?.() || ""),
           allowedTools: this.options.allowedTools,
           maxBudgetUsd: this.options.maxBudgetUsd,
           cwd: this.options.cwd || this.config.workingDir,

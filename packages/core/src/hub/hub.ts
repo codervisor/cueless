@@ -3,6 +3,8 @@ import { EventBus } from "../events/eventBus";
 import { ExecutionEvent } from "../events/types";
 import { IMAdapter, IMAdapterStartOptions, IMMessage } from "../gateway/types";
 import { Logger } from "../logging";
+import { MemoryStore, formatMemoryList } from "../memory";
+import { MemorySync } from "../memory/sync";
 import { ChunkThrottler } from "./chunkThrottler";
 import { ExecutionRegistry, InMemoryExecutionRegistry } from "./executionRegistry";
 import { PermissionBridge } from "./permissionBridge";
@@ -19,6 +21,11 @@ type BuiltinCommand =
   | { type: "status"; executionId: string }
   | { type: "logs"; executionId: string }
   | { type: "list" }
+  | { type: "memory" }
+  | { type: "memory-search"; query: string }
+  | { type: "memory-edit"; id: string; text: string }
+  | { type: "memory-delete"; id: string }
+  | { type: "memory-export" }
   | null;
 
 export const parseBuiltinCommand = (text: string): BuiltinCommand => {
@@ -36,6 +43,30 @@ export const parseBuiltinCommand = (text: string): BuiltinCommand => {
 
   if (/^\/list\s*$/i.test(trimmed)) {
     return { type: "list" };
+  }
+
+  // Memory commands
+  const memEditMatch = trimmed.match(/^\/memory\s+edit\s+(f\d+)\s+(.+)$/i);
+  if (memEditMatch?.[1] && memEditMatch[2]) {
+    return { type: "memory-edit", id: memEditMatch[1], text: memEditMatch[2] };
+  }
+
+  const memDeleteMatch = trimmed.match(/^\/memory\s+delete\s+(f\d+)\s*$/i);
+  if (memDeleteMatch?.[1]) {
+    return { type: "memory-delete", id: memDeleteMatch[1] };
+  }
+
+  const memSearchMatch = trimmed.match(/^\/memory\s+search\s+(.+)$/i);
+  if (memSearchMatch?.[1]) {
+    return { type: "memory-search", query: memSearchMatch[1] };
+  }
+
+  if (/^\/memory\s+export\s*$/i.test(trimmed)) {
+    return { type: "memory-export" };
+  }
+
+  if (/^\/memory\s*$/i.test(trimmed)) {
+    return { type: "memory" };
   }
 
   return null;
@@ -83,7 +114,9 @@ export class ChannelHub {
     private readonly router: Router,
     private readonly eventBus: EventBus,
     private readonly logger: Logger,
-    executionRegistry?: ExecutionRegistry
+    executionRegistry?: ExecutionRegistry,
+    private readonly memoryStore?: MemoryStore,
+    private readonly memorySync?: MemorySync
   ) {
     this.executionRegistry = executionRegistry ?? new InMemoryExecutionRegistry();
     this.permissionBridge = new PermissionBridge(logger);
@@ -534,6 +567,75 @@ export class ChannelHub {
     message: IMMessage,
     command: Exclude<BuiltinCommand, null>
   ): Promise<void> {
+    // Memory commands
+    if (command.type === "memory") {
+      if (!this.memoryStore) {
+        await adapter.sendMessage(message.chatId, "Memory is not configured. Set MEMORY_CHAT_ID to enable.");
+        return;
+      }
+      const html = formatMemoryList(this.memoryStore.all());
+      await adapter.sendMessage(message.chatId, html);
+      return;
+    }
+
+    if (command.type === "memory-search") {
+      if (!this.memoryStore) {
+        await adapter.sendMessage(message.chatId, "Memory is not configured.");
+        return;
+      }
+      const results = this.memoryStore.search(command.query);
+      const html = results.length > 0
+        ? formatMemoryList(results)
+        : `No memories matching "${escapeHtml(command.query)}".`;
+      await adapter.sendMessage(message.chatId, html);
+      return;
+    }
+
+    if (command.type === "memory-edit") {
+      if (!this.memoryStore || !this.memorySync) {
+        await adapter.sendMessage(message.chatId, "Memory is not configured.");
+        return;
+      }
+      if (this.memoryStore.update(command.id, command.text)) {
+        await this.memorySync.save(this.memoryStore.snapshot());
+        await adapter.sendMessage(message.chatId, `Updated <code>${command.id}</code>.`);
+      } else {
+        await adapter.sendMessage(message.chatId, `Unknown memory ID: ${command.id}`);
+      }
+      return;
+    }
+
+    if (command.type === "memory-delete") {
+      if (!this.memoryStore || !this.memorySync) {
+        await adapter.sendMessage(message.chatId, "Memory is not configured.");
+        return;
+      }
+      if (this.memoryStore.remove(command.id)) {
+        await this.memorySync.save(this.memoryStore.snapshot());
+        await adapter.sendMessage(message.chatId, `Deleted <code>${command.id}</code>.`);
+      } else {
+        await adapter.sendMessage(message.chatId, `Unknown memory ID: ${command.id}`);
+      }
+      return;
+    }
+
+    if (command.type === "memory-export") {
+      if (!this.memoryStore) {
+        await adapter.sendMessage(message.chatId, "Memory is not configured.");
+        return;
+      }
+      if (adapter.sendDocument) {
+        const json = this.memoryStore.toJSON();
+        await adapter.sendDocument(message.chatId, Buffer.from(json, "utf-8"), {
+          fileName: "memory.json",
+          caption: `${this.memoryStore.all().length} facts exported.`,
+        });
+      } else {
+        await adapter.sendMessage(message.chatId, this.memoryStore.toJSON());
+      }
+      return;
+    }
+
     if (command.type === "list") {
       const records = this.executionRegistry.list(message.channelId, message.chatId).slice(0, 10);
       if (records.length === 0) {
