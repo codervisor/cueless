@@ -259,7 +259,9 @@ export class ChannelHub {
     this.logger.info("Received message.", {
       executionId,
       channelId: message.channelId,
-      chatId: message.chatId
+      chatId: message.chatId,
+      text: message.text ? message.text.slice(0, 200) : undefined,
+      fileId: message.fileId || undefined
     });
 
     // Start typing indicator immediately so user sees activity
