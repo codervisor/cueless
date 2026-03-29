@@ -67,12 +67,19 @@ export interface AgentConfig {
   bare?: boolean;
 }
 
+export interface MemoryConfig {
+  enabled: boolean;
+  chatId: string;
+  topicId?: number;
+}
+
 export interface Config {
   channels: ChannelConfig[];
   agents: AgentConfig[];
   defaultAgent?: string;
   logLevel: "debug" | "info" | "warn" | "error";
   dataDir?: string;
+  memory?: MemoryConfig;
 }
 
 const parseLogLevel = (value?: string): Config["logLevel"] => {
@@ -187,11 +194,21 @@ export const loadConfig = (): Config => {
   // Load .env files before accessing process.env
   loadEnv();
 
+  const memoryChatId = process.env.MEMORY_CHAT_ID?.trim();
+  const memoryTopicId = process.env.MEMORY_TOPIC_ID?.trim();
+
   return {
     channels: parseChannels(),
     agents: parseAgents(),
     defaultAgent: process.env.DEFAULT_AGENT,
     logLevel: parseLogLevel(process.env.LOG_LEVEL),
-    dataDir: process.env.DATA_DIR || undefined
+    dataDir: process.env.DATA_DIR || undefined,
+    memory: memoryChatId
+      ? {
+          enabled: true,
+          chatId: memoryChatId,
+          topicId: memoryTopicId ? Number(memoryTopicId) : undefined,
+        }
+      : undefined,
   };
 };

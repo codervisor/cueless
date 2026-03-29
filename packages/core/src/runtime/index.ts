@@ -1,6 +1,9 @@
 import { AgentConfig, Config } from "../config";
 import { AgentRegistry } from "../hub/agentRegistry";
 import { Logger } from "../logging";
+import { MemoryStore, buildMemoryPrompt } from "../memory";
+import { MemoryExtractor } from "../memory/extractor";
+import { MemorySync } from "../memory/sync";
 import { CliRuntime } from "./cliRuntime";
 import { ClaudeSession } from "./session/claudeSession";
 import { CopilotSession } from "./session/copilotSession";
@@ -11,9 +14,21 @@ import { InMemorySessionManager } from "./session/inMemorySessionManager";
 import { SessionRuntime } from "./session/sessionRuntime";
 import { Runtime } from "./types";
 
-export const createRuntime = (agent: AgentConfig, logger: Logger, dataDir?: string): Runtime => {
+export interface CreateRuntimeOptions {
+  dataDir?: string;
+  memoryStore?: MemoryStore;
+  memorySync?: MemorySync;
+  memoryExtractor?: MemoryExtractor;
+}
+
+export const createRuntime = (agent: AgentConfig, logger: Logger, options?: CreateRuntimeOptions): Runtime => {
+  const { dataDir, memoryStore, memorySync, memoryExtractor } = options ?? {};
+  const getSystemPromptSuffix = memoryStore
+    ? () => buildMemoryPrompt(memoryStore.all())
+    : undefined;
+
   if (!agent.runtime || agent.runtime === "cli") {
-    return new CliRuntime(agent, logger, dataDir);
+    return new CliRuntime(agent, logger, { dataDir, getSystemPromptSuffix, memoryStore, memorySync, memoryExtractor });
   }
 
   const fileStore = dataDir ? new FileSessionStore(dataDir, `${agent.runtime}-sessions.json`, logger) : undefined;
@@ -32,7 +47,8 @@ export const createRuntime = (agent: AgentConfig, logger: Logger, dataDir?: stri
             systemPrompt: agent.systemPrompt,
             allowedTools: agent.allowedTools,
             maxBudgetUsd: agent.maxBudgetUsd,
-            cwd: agent.workingDir
+            cwd: agent.workingDir,
+            getSystemPromptSuffix,
           }, logger);
         case "session-gemini":
           return new GeminiSession(channelId, chatId, agent);
@@ -44,14 +60,19 @@ export const createRuntime = (agent: AgentConfig, logger: Logger, dataDir?: stri
     }
   });
 
-  return new SessionRuntime(agent, sessionManager, logger, fileStore);
+  return new SessionRuntime(agent, sessionManager, logger, {
+    fileStore,
+    memoryStore,
+    memorySync,
+    memoryExtractor,
+  });
 };
 
-export const createAgentRegistry = (config: Config, logger: Logger): AgentRegistry => {
+export const createAgentRegistry = (config: Config, logger: Logger, memoryStore?: MemoryStore, memorySync?: MemorySync, memoryExtractor?: MemoryExtractor): AgentRegistry => {
   const registry = new AgentRegistry(config.defaultAgent);
 
   for (const agent of config.agents) {
-    registry.register(agent.name, createRuntime(agent, logger, config.dataDir));
+    registry.register(agent.name, createRuntime(agent, logger, { dataDir: config.dataDir, memoryStore, memorySync, memoryExtractor }));
   }
 
   return registry;
