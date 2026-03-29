@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # Start web server
 node /app/web/apps/web/server.js &
@@ -20,20 +20,14 @@ on_signal() {
 
 trap 'on_signal' INT TERM
 
-# Poll until either process exits
-while kill -0 "$WEB_PID" 2>/dev/null && kill -0 "$CLI_PID" 2>/dev/null; do
-  sleep 1
-done
-
-# One process has exited — check which
-if ! kill -0 "$WEB_PID" 2>/dev/null; then
-  wait "$WEB_PID"
+# Wait for the first process to exit
+if ! wait -n "$WEB_PID" "$CLI_PID"; then
   status=$?
-else
-  wait "$CLI_PID"
-  status=$?
+  terminate
+  wait "$WEB_PID" "$CLI_PID" 2>/dev/null
+  exit "$status"
 fi
 
-terminate
-wait "$WEB_PID" "$CLI_PID" 2>/dev/null
-exit "$status"
+# First process exited successfully; wait for the remaining one
+wait "$WEB_PID" "$CLI_PID"
+exit $?
