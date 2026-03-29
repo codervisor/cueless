@@ -176,7 +176,7 @@ export class CliRuntime implements Runtime {
           executionId,
           channelId: message.channelId,
           chatId: message.chatId,
-          type: "stdout",
+          type: "stream-text",
           timestamp: Date.now(),
           payload: { text }
         });

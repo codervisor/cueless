@@ -53,7 +53,7 @@ test("CliRuntime parses command string with embedded args", async () => {
 
   await runtime.execute(msg({ text: "world" }), "exec-1b", eventBus);
 
-  const stdout = events.filter((e) => e.type === "stdout").map((e) => e.payload?.text).join("");
+  const stdout = events.filter((e) => e.type === "stream-text").map((e) => e.payload?.text).join("");
   assert.ok(stdout.includes("--flag"), "should include initial arg from command string");
   assert.ok(stdout.includes("world"), "should include prompt as positional arg");
 });
@@ -67,7 +67,7 @@ test("CliRuntime captures stdout from command", async () => {
 
   await runtime.execute(msg(), "exec-2", eventBus);
 
-  const stdout = events.filter((e) => e.type === "stdout").map((e) => e.payload?.text).join("");
+  const stdout = events.filter((e) => e.type === "stream-text").map((e) => e.payload?.text).join("");
   assert.ok(stdout.includes("hi"), "stdout should contain 'hi'");
 });
 
@@ -119,7 +119,7 @@ test("CliRuntime clears session after failure so next call starts fresh", async 
   const eb2 = new EventBus();
   const ev2 = collect(eb2);
   await runtime.execute(msg(), "exec-4b-2", eb2);
-  const stdout = ev2.filter((e) => e.type === "stdout").map((e) => e.payload?.text).join("");
+  const stdout = ev2.filter((e) => e.type === "stream-text").map((e) => e.payload?.text).join("");
   assert.ok(stdout.includes("--session-id"), "fresh runtime should use --session-id");
 });
 
@@ -132,13 +132,13 @@ test("CliRuntime reuses session for same channel+chat", async () => {
   const eventBus1 = new EventBus();
   const events1 = collect(eventBus1);
   await runtime.execute(msg(), "exec-5a", eventBus1);
-  const stdout1 = events1.filter((e) => e.type === "stdout").map((e) => e.payload?.text).join("");
+  const stdout1 = events1.filter((e) => e.type === "stream-text").map((e) => e.payload?.text).join("");
   assert.ok(stdout1.includes("--session-id"), "first call should use --session-id");
 
   const eventBus2 = new EventBus();
   const events2 = collect(eventBus2);
   await runtime.execute(msg(), "exec-5b", eventBus2);
-  const stdout2 = events2.filter((e) => e.type === "stdout").map((e) => e.payload?.text).join("");
+  const stdout2 = events2.filter((e) => e.type === "stream-text").map((e) => e.payload?.text).join("");
   assert.ok(stdout2.includes("--resume"), "second call should use --resume");
 });
 
@@ -154,8 +154,8 @@ test("CliRuntime uses separate sessions for different chats", async () => {
   const ev2 = collect(eb2);
   await runtime.execute(msg({ chatId: "chat-B" }), "exec-6b", eb2);
 
-  const out1 = ev1.filter((e) => e.type === "stdout").map((e) => e.payload?.text).join("");
-  const out2 = ev2.filter((e) => e.type === "stdout").map((e) => e.payload?.text).join("");
+  const out1 = ev1.filter((e) => e.type === "stream-text").map((e) => e.payload?.text).join("");
+  const out2 = ev2.filter((e) => e.type === "stream-text").map((e) => e.payload?.text).join("");
   assert.ok(out1.includes("--session-id"), "chat-A should get its own session");
   assert.ok(out2.includes("--session-id"), "chat-B should get its own session");
 });
@@ -269,7 +269,7 @@ test("CliRuntime passes config flags to the command", async () => {
 
   await runtime.execute(msg(), "exec-10", eventBus);
 
-  const stdout = events.filter((e) => e.type === "stdout").map((e) => e.payload?.text).join("");
+  const stdout = events.filter((e) => e.type === "stream-text").map((e) => e.payload?.text).join("");
   assert.ok(stdout.includes("--model opus"), "should include --model");
   assert.ok(stdout.includes("--append-system-prompt"), "should include --append-system-prompt");
   assert.ok(stdout.includes("--permission-mode plan"), "should include --permission-mode");

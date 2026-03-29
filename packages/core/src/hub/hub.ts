@@ -298,8 +298,9 @@ export class ChannelHub {
         });
         break;
       case "stdout":
-      case "stderr": {
-        const label = `[${event.type}]`;
+      case "stderr":
+      case "stream-text": {
+        const label = event.type === "stream-text" ? "[stdout]" : `[${event.type}]`;
         const text = event.payload?.text || "";
         this.executionRegistry.append(event.executionId, `${label} ${text}`);
         break;
@@ -362,6 +363,10 @@ export class ChannelHub {
       // Always stop typing indicator on completion
       this.stopTypingIndicator(event.channelId, event.chatId, event.executionId);
       await this.flushAndDeleteThrottler(event.channelId, event.chatId);
+
+      // Flush stream draft and check if we already streamed the response
+      const draftKey = `${event.channelId}:${event.chatId}:${event.executionId}`;
+      const hadStreamDraft = this.streamDrafts.has(draftKey);
       await this.flushStreamDraft(adapter, event.channelId, event.chatId, event.executionId);
 
       // Close forum topic on completion
@@ -370,6 +375,11 @@ export class ChannelHub {
           // Non-critical
         });
         this.topicMap.delete(`${event.channelId}:${event.chatId}:${event.executionId}`);
+      }
+
+      // Skip sending duplicate response if we already streamed it in-place
+      if (hadStreamDraft && event.type === "complete") {
+        return;
       }
     }
 
