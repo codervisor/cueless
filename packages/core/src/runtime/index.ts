@@ -29,7 +29,7 @@ export const createRuntime = (agent: AgentConfig, logger: Logger): Runtime => {
             allowedTools: agent.allowedTools,
             maxBudgetUsd: agent.maxBudgetUsd,
             cwd: agent.workingDir
-          });
+          }, logger);
         case "session-gemini":
           return new GeminiSession(channelId, chatId, agent);
         case "session-copilot":

@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import type { query as sdkQuery, SDKMessage, SDKUserMessage, PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { AgentConfig } from "../../config";
 import { EventBus } from "../../events/eventBus";
+import { Logger } from "../../logging";
 import { AgentSession } from "./types";
 
 export interface SdkClaudeSessionOptions {
@@ -72,7 +73,8 @@ export class SdkClaudeSession implements AgentSession {
     readonly channelId: string,
     readonly chatId: string,
     private readonly config: AgentConfig,
-    options?: SdkClaudeSessionOptions
+    options?: SdkClaudeSessionOptions,
+    private readonly logger?: Logger
   ) {
     this.options = options ?? {};
   }
@@ -80,8 +82,30 @@ export class SdkClaudeSession implements AgentSession {
   async send(userText: string, executionId: string, eventBus: EventBus): Promise<string> {
     // Lazy-load the SDK to avoid import issues in test environments
     if (!this.sdkQueryFn) {
-      const sdk = await import("@anthropic-ai/claude-agent-sdk");
-      this.sdkQueryFn = sdk.query;
+      this.logger?.info("Loading Claude Agent SDK...", { sessionId: this.sessionId });
+      try {
+        const sdk = await import("@anthropic-ai/claude-agent-sdk");
+        this.sdkQueryFn = sdk.query;
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "unknown";
+        this.logger?.error("Failed to load Claude Agent SDK.", { reason });
+        throw new Error(`Failed to load Claude Agent SDK: ${reason}`);
+      }
+    }
+
+    const hasOAuthToken = !!process.env.CLAUDE_CODE_OAUTH_TOKEN;
+    const hasApiKey = !!process.env.ANTHROPIC_API_KEY;
+    this.logger?.info("SDK session send.", {
+      executionId,
+      sessionId: this.sessionId,
+      sdkSessionId: this.sdkSessionId,
+      hasOAuthToken,
+      hasApiKey,
+      model: this.options.model || this.config.env?.CLAUDE_MODEL || "(default)"
+    });
+
+    if (!hasOAuthToken && !hasApiKey) {
+      this.logger?.warn("No CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY found in environment. SDK query will likely fail.");
     }
 
     return this.executeQuery(userText, executionId, eventBus);
@@ -96,32 +120,51 @@ export class SdkClaudeSession implements AgentSession {
 
   private async executeQuery(userText: string, executionId: string, eventBus: EventBus): Promise<string> {
     const query = this.sdkQueryFn!;
+    const timeoutMs = this.config.timeoutMs ?? 10 * 60 * 1000;
 
     const abortController = new AbortController();
     let resultText = "";
+    let messageCount = 0;
 
-    const sdkQuery = query({
-      prompt: userText,
-      options: {
-        abortController,
-        model: this.options.model || this.config.env?.CLAUDE_MODEL,
-        systemPrompt: this.options.systemPrompt,
-        allowedTools: this.options.allowedTools,
-        maxBudgetUsd: this.options.maxBudgetUsd,
-        cwd: this.options.cwd || this.config.workingDir,
-        resume: this.sdkSessionId,
-        includePartialMessages: true,
-        permissionMode: "default",
-        canUseTool: async (toolName: string, toolInput: Record<string, unknown>, opts: { signal: AbortSignal }) => {
-          return this.handlePermissionRequest(executionId, eventBus, toolName, toolInput, opts.signal);
+    const timeout = setTimeout(() => {
+      this.logger?.error("SDK query timeout — aborting.", { executionId, timeoutMs, messageCount });
+      abortController.abort();
+    }, timeoutMs);
+
+    this.logger?.debug("Starting SDK query.", { executionId, timeoutMs });
+
+    let sdkQuery: AsyncGenerator<SDKMessage, void>;
+    try {
+      sdkQuery = query({
+        prompt: userText,
+        options: {
+          abortController,
+          model: this.options.model || this.config.env?.CLAUDE_MODEL,
+          systemPrompt: this.options.systemPrompt,
+          allowedTools: this.options.allowedTools,
+          maxBudgetUsd: this.options.maxBudgetUsd,
+          cwd: this.options.cwd || this.config.workingDir,
+          resume: this.sdkSessionId,
+          includePartialMessages: true,
+          permissionMode: "default",
+          canUseTool: async (toolName: string, toolInput: Record<string, unknown>, opts: { signal: AbortSignal }) => {
+            return this.handlePermissionRequest(executionId, eventBus, toolName, toolInput, opts.signal);
+          }
         }
-      }
-    });
+      });
+    } catch (error) {
+      clearTimeout(timeout);
+      const reason = error instanceof Error ? error.message : "unknown";
+      this.logger?.error("SDK query() call failed — possible auth or config error.", { executionId, reason });
+      throw new Error(`SDK query initialization failed: ${reason}`);
+    }
 
     this.activeQuery = sdkQuery;
 
     try {
       for await (const message of sdkQuery) {
+        messageCount++;
+        this.logger?.debug("SDK message received.", { executionId, type: message.type, subtype: (message as { subtype?: string }).subtype, messageCount });
         this.processMessage(message, executionId, eventBus);
 
         if (message.type === "result") {
@@ -130,16 +173,31 @@ export class SdkClaudeSession implements AgentSession {
             resultText = message.result;
           } else {
             const errorMsg = "duration_ms" in message ? `SDK error after ${message.duration_ms}ms` : "SDK execution error";
+            this.logger?.error("SDK returned error result.", { executionId, errorMsg, message: JSON.stringify(message) });
             throw new Error(errorMsg);
           }
         }
 
         if (message.type === "system" && message.subtype === "init") {
           this.sdkSessionId = message.session_id;
+          this.logger?.info("SDK session initialized.", { executionId, sdkSessionId: this.sdkSessionId });
         }
       }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "unknown";
+      this.logger?.error("SDK query iteration failed.", { executionId, reason, messageCount });
+      throw error;
     } finally {
+      clearTimeout(timeout);
       this.activeQuery = undefined;
+    }
+
+    if (!resultText && messageCount === 0) {
+      this.logger?.warn("SDK query completed with zero messages — likely auth failure or silent error.", { executionId });
+    } else if (!resultText) {
+      this.logger?.warn("SDK query completed with no result text.", { executionId, messageCount });
+    } else {
+      this.logger?.debug("SDK query completed.", { executionId, messageCount, resultLength: resultText.length });
     }
 
     return resultText;

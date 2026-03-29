@@ -30,6 +30,16 @@ export class SessionRuntime implements Runtime {
 
     const response = await session.send(message.text, executionId, eventBus);
 
+    if (!response) {
+      this.logger.warn("Session returned empty response — runtime may have failed silently.", {
+        executionId,
+        sessionId: session.sessionId,
+        channelId: message.channelId,
+        chatId: message.chatId,
+        runtime: this.config.runtime
+      });
+    }
+
     eventBus.emit({
       executionId,
       channelId: message.channelId,
