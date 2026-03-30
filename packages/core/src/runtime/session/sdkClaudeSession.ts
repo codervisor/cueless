@@ -246,6 +246,19 @@ export class SdkClaudeSession implements AgentSession {
 
       case "stream_event": {
         const event = message.event;
+
+        // Detect tool-use blocks starting via stream (fires before assistant message is complete)
+        if (event.type === "content_block_start" && "content_block" in event) {
+          const block = event.content_block as { type: string; name?: string; id?: string };
+          if (block.type === "tool_use" && block.name) {
+            eventBus.emit({
+              ...base,
+              type: "tool-use",
+              payload: { toolName: block.name }
+            });
+          }
+        }
+
         if (event.type === "content_block_delta" && "delta" in event) {
           const delta = event.delta as { type: string; text?: string };
           if (delta.type === "text_delta" && delta.text) {
