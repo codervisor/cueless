@@ -137,6 +137,7 @@ export class ChannelHub {
   private readonly topicMap = new Map<string, number>(); // "channelId:chatId:executionId" → topicId
   private readonly streamDrafts = new Map<string, { text: string; messageId?: number }>(); // for streaming text accumulation
   private readonly typingIntervals = new Map<string, ReturnType<typeof setInterval>>(); // periodic typing indicators
+  private readonly toolActivityMessages = new Map<string, { tools: string[]; messageId?: number }>(); // tool activity tracking
   private readonly eventQueues = new Map<string, Promise<void>>(); // serialize events per execution
   private unsubscribeEvents?: () => void;
 
@@ -191,6 +192,7 @@ export class ChannelHub {
       throttler.destroy();
     }
     this.chunkThrottlers.clear();
+    this.toolActivityMessages.clear();
     this.eventQueues.clear();
 
     await Promise.all(Array.from(this.adapters.values()).map((adapter) => adapter.stop()));
@@ -432,10 +434,20 @@ export class ChannelHub {
       return;
     }
 
+    // Handle tool-use — show activity and restart typing indicator
+    if (event.type === "tool-use") {
+      await this.forwardToolActivity(adapter, event, topicId);
+      // Restart typing indicator so user sees activity during tool execution
+      this.startTypingIndicator(adapter, event.chatId, event.executionId, topicId);
+      return;
+    }
+
     // Handle streaming text — accumulate and edit message in-place
     if (event.type === "stream-text") {
       // Stop typing indicator once we start streaming actual text
       this.stopTypingIndicator(event.channelId, event.chatId, event.executionId);
+      // Clear tool activity message — text is now streaming
+      this.clearToolActivity(event.channelId, event.chatId, event.executionId);
       await this.forwardStreamText(adapter, event, topicId);
       return;
     }
@@ -443,6 +455,7 @@ export class ChannelHub {
     if (event.type === "complete" || event.type === "error") {
       // Always stop typing indicator on completion
       this.stopTypingIndicator(event.channelId, event.chatId, event.executionId);
+      this.clearToolActivity(event.channelId, event.chatId, event.executionId);
       await this.flushAndDeleteThrottler(event.channelId, event.chatId);
 
       // Flush stream draft and check if we already streamed the response
@@ -528,6 +541,45 @@ export class ChannelHub {
         decision
       }
     });
+  }
+
+  private async forwardToolActivity(adapter: IMAdapter, event: ExecutionEvent, topicId?: number): Promise<void> {
+    const toolName = event.payload?.toolName || "unknown";
+    const activityKey = `${event.channelId}:${event.chatId}:${event.executionId}`;
+
+    let activity = this.toolActivityMessages.get(activityKey);
+    if (!activity) {
+      activity = { tools: [] };
+      this.toolActivityMessages.set(activityKey, activity);
+    }
+
+    activity.tools.push(toolName);
+
+    // Format compact tool list — show last few tools to keep message short
+    const displayTools = activity.tools.slice(-6);
+    const prefix = activity.tools.length > 6 ? "… " : "";
+    const toolList = displayTools.map((t) => `<code>${escapeHtml(t)}</code>`).join(" → ");
+    const statusMsg = `⚙️ ${prefix}${toolList}`;
+
+    if (activity.messageId && adapter.editMessage) {
+      await adapter.editMessage(event.chatId, activity.messageId, statusMsg).catch(() => {
+        // Message may have been deleted — non-critical
+      });
+    } else if (adapter.sendMessageWithMarkup) {
+      const messageId = await adapter.sendMessageWithMarkup(
+        event.chatId,
+        statusMsg,
+        undefined,
+        { threadId: topicId }
+      );
+      activity.messageId = messageId;
+    } else {
+      await adapter.sendMessage(event.chatId, statusMsg);
+    }
+  }
+
+  private clearToolActivity(channelId: string, chatId: string, executionId: string): void {
+    this.toolActivityMessages.delete(`${channelId}:${chatId}:${executionId}`);
   }
 
   private async forwardStreamText(adapter: IMAdapter, event: ExecutionEvent, topicId?: number): Promise<void> {
