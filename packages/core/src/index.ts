@@ -53,7 +53,13 @@ export async function startDaemon(): Promise<void> {
 
       memorySync = new MemorySync(memBot, config.memory, logger);
       memoryStore = new MemoryStore();
-      memoryExtractor = new MemoryExtractor(logger);
+
+      if (config.memory.extraction) {
+        memoryExtractor = new MemoryExtractor(config.memory.extraction, logger);
+        logger.info("Memory extraction enabled.", { provider: config.memory.extraction.provider, model: config.memory.extraction.model });
+      } else {
+        logger.info("No extraction LLM configured — automatic memory extraction disabled. Set ANTHROPIC_API_KEY or MEMORY_LLM_BASE_URL + MEMORY_LLM_API_KEY to enable.");
+      }
 
       const snapshot = await memorySync.load();
       if (snapshot) {
