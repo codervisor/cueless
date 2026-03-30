@@ -588,13 +588,12 @@ export class ChannelHub {
     const draft = this.streamDrafts.get(draftKey);
     if (!draft) return false;
 
-    const trimmedText = draft.text.trim();
-    if (!trimmedText) {
+    if (!draft.text.trim()) {
       this.streamDrafts.delete(draftKey);
       return false;
     }
 
-    const chunks = splitMessage(trimmedText);
+    const chunks = splitMessage(draft.text);
 
     if (draft.messageId && adapter.editMessage) {
       // Edit existing message with first chunk
