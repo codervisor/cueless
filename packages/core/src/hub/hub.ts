@@ -553,8 +553,8 @@ export class ChannelHub {
       await adapter.editMessage(event.chatId, draft.messageId, escapeHtml(draft.text)).catch(() => {
         // Edit might fail if message was deleted; non-critical
       });
-    } else if (!draft.messageId) {
-      // Send initial message
+    } else if (!draft.messageId && draft.text.trim()) {
+      // Send initial message (only if non-empty after trimming)
       if (adapter.sendMessageWithMarkup) {
         const messageId = await adapter.sendMessageWithMarkup(
           event.chatId,
@@ -574,7 +574,13 @@ export class ChannelHub {
     const draft = this.streamDrafts.get(draftKey);
     if (!draft) return;
 
-    const chunks = splitMessage(draft.text);
+    const trimmedText = draft.text.trim();
+    if (!trimmedText) {
+      this.streamDrafts.delete(draftKey);
+      return;
+    }
+
+    const chunks = splitMessage(trimmedText);
 
     if (draft.messageId && adapter.editMessage) {
       // Edit existing message with first chunk
