@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { MemoryExtractionConfig } from "../config";
 import { Logger } from "../logging";
 import { MemoryFact, MemoryTag } from "./store";
 
@@ -32,11 +33,13 @@ Conversation:
 Output:`;
 
 export class MemoryExtractor {
-  private client: Anthropic;
+  private extractionConfig: MemoryExtractionConfig;
 
-  constructor(private readonly logger?: Logger) {
-    // The Anthropic SDK auto-reads ANTHROPIC_API_KEY from env
-    this.client = new Anthropic();
+  constructor(
+    extractionConfig: MemoryExtractionConfig,
+    private readonly logger?: Logger,
+  ) {
+    this.extractionConfig = extractionConfig;
   }
 
   async extract(conversation: string, currentFacts: MemoryFact[]): Promise<MemoryChanges> {
@@ -49,16 +52,9 @@ export class MemoryExtractor {
       .replace("{conversation}", conversation);
 
     try {
-      const response = await this.client.messages.create({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 512,
-        messages: [{ role: "user", content: prompt }],
-      });
-
-      const text = response.content
-        .filter((block): block is Anthropic.TextBlock => block.type === "text")
-        .map((block) => block.text)
-        .join("");
+      const text = this.extractionConfig.provider === "anthropic"
+        ? await this.callAnthropic(prompt)
+        : await this.callOpenAI(prompt);
 
       return this.parseChanges(text);
     } catch (error) {
@@ -67,6 +63,44 @@ export class MemoryExtractor {
       });
       return EMPTY_CHANGES;
     }
+  }
+
+  private async callAnthropic(prompt: string): Promise<string> {
+    const client = new Anthropic({ apiKey: this.extractionConfig.apiKey });
+    const response = await client.messages.create({
+      model: this.extractionConfig.model,
+      max_tokens: 512,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    return response.content
+      .filter((block): block is Anthropic.TextBlock => block.type === "text")
+      .map((block) => block.text)
+      .join("");
+  }
+
+  private async callOpenAI(prompt: string): Promise<string> {
+    const baseUrl = this.extractionConfig.baseUrl!.replace(/\/+$/, "");
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.extractionConfig.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.extractionConfig.model,
+        max_tokens: 512,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`OpenAI-compatible API error ${response.status}: ${body.slice(0, 200)}`);
+    }
+
+    const data = await response.json() as { choices?: { message?: { content?: string } }[] };
+    return data.choices?.[0]?.message?.content || "";
   }
 
   private parseChanges(text: string): MemoryChanges {

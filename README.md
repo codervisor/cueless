@@ -67,7 +67,6 @@ Telegramable can persist facts across sessions using Telegram itself as the stor
 | ----------------- | ------- | ---------------------------------------------- |
 | MEMORY_CHAT_ID    | -       | Telegram chat ID for memory storage (enables memory) |
 | MEMORY_TOPIC_ID   | -       | Forum topic ID within the chat (optional)      |
-| ANTHROPIC_API_KEY  | -       | Required for memory extraction (uses Haiku)    |
 
 **Setup:**
 
@@ -75,9 +74,19 @@ Telegramable can persist facts across sessions using Telegram itself as the stor
 2. Add your bot to that channel/group as an admin.
 3. Copy the chat ID (you can use `@userinfobot` or the Telegram API to find it).
 4. Set `MEMORY_CHAT_ID` in your `.env`. If using a forum group, also set `MEMORY_TOPIC_ID`.
-5. Set `ANTHROPIC_API_KEY` — the memory extractor uses Claude Haiku to analyze conversations.
 
-On startup the bot loads the pinned memory snapshot. After each conversation turn, new facts are extracted automatically and synced back to the pinned message.
+On startup the bot loads the pinned memory snapshot and syncs changes back after each conversation.
+
+**Extraction LLM** — automatically picks up facts from conversations. Two options:
+
+| Variable            | Description                                              |
+| ------------------- | -------------------------------------------------------- |
+| ANTHROPIC_API_KEY   | Uses Anthropic API (defaults to `claude-haiku-4-5-20251001`) |
+| MEMORY_LLM_BASE_URL | OpenAI-compatible endpoint (OpenRouter, local LLMs, etc.) |
+| MEMORY_LLM_API_KEY  | API key for the OpenAI-compatible endpoint               |
+| MEMORY_LLM_MODEL    | Model name (default: `gpt-4o-mini` for OpenAI, `claude-haiku-4-5-20251001` for Anthropic) |
+
+Use **Option 1** (`ANTHROPIC_API_KEY`) if you have an Anthropic API account. Use **Option 2** (`MEMORY_LLM_BASE_URL` + `MEMORY_LLM_API_KEY`) for any OpenAI-compatible provider — e.g., OpenRouter, Ollama, vLLM, or Together AI.
 
 **User commands:**
 

@@ -67,10 +67,18 @@ export interface AgentConfig {
   bare?: boolean;
 }
 
+export interface MemoryExtractionConfig {
+  provider: "anthropic" | "openai";
+  apiKey: string;
+  model: string;
+  baseUrl?: string; // For OpenAI-compatible endpoints (OpenRouter, local LLMs, etc.)
+}
+
 export interface MemoryConfig {
   enabled: boolean;
   chatId: string;
   topicId?: number;
+  extraction?: MemoryExtractionConfig;
 }
 
 export interface Config {
@@ -197,6 +205,35 @@ export const loadConfig = (): Config => {
   const memoryChatId = process.env.MEMORY_CHAT_ID?.trim();
   const memoryTopicId = process.env.MEMORY_TOPIC_ID?.trim();
 
+  // Resolve memory extraction LLM config:
+  // 1. MEMORY_LLM_BASE_URL + MEMORY_LLM_API_KEY → OpenAI-compatible
+  // 2. ANTHROPIC_API_KEY → Anthropic (default)
+  const parseMemoryExtraction = (): MemoryExtractionConfig | undefined => {
+    const memoryBaseUrl = process.env.MEMORY_LLM_BASE_URL?.trim();
+    const memoryApiKey = process.env.MEMORY_LLM_API_KEY?.trim();
+    const memoryModel = process.env.MEMORY_LLM_MODEL?.trim();
+
+    if (memoryBaseUrl && memoryApiKey) {
+      return {
+        provider: "openai",
+        apiKey: memoryApiKey,
+        model: memoryModel || "gpt-4o-mini",
+        baseUrl: memoryBaseUrl,
+      };
+    }
+
+    const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
+    if (anthropicKey) {
+      return {
+        provider: "anthropic",
+        apiKey: anthropicKey,
+        model: memoryModel || "claude-haiku-4-5-20251001",
+      };
+    }
+
+    return undefined;
+  };
+
   return {
     channels: parseChannels(),
     agents: parseAgents(),
@@ -208,6 +245,7 @@ export const loadConfig = (): Config => {
           enabled: true,
           chatId: memoryChatId,
           topicId: memoryTopicId ? Number(memoryTopicId) : undefined,
+          extraction: parseMemoryExtraction(),
         }
       : undefined,
   };
