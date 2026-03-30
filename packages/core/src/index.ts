@@ -48,35 +48,43 @@ export async function startDaemon(): Promise<void> {
     // We need a Bot instance for MemorySync — get the token from the first Telegram channel
     const telegramChannel = config.channels.find((ch) => ch.type === "telegram");
     if (telegramChannel && typeof telegramChannel.token === "string") {
-      const memBot = new Bot(telegramChannel.token);
-      await memBot.init();
+      try {
+        const memBot = new Bot(telegramChannel.token);
+        await memBot.init();
 
-      // Resolve @username to numeric chat ID if needed
-      const rawChatId = config.memory.chatId;
-      if (rawChatId.startsWith("@") || !/^-?\d+$/.test(rawChatId)) {
-        const chat = await memBot.api.getChat(rawChatId);
-        config.memory.chatId = String(chat.id);
-        logger.info("Resolved memory chat.", { from: rawChatId, to: chat.id });
-      }
+        // Resolve @username to numeric chat ID if needed
+        const rawChatId = config.memory.chatId;
+        if (rawChatId.startsWith("@") || !/^-?\d+$/.test(rawChatId)) {
+          const chat = await memBot.api.getChat(rawChatId);
+          config.memory.chatId = String(chat.id);
+          logger.info("Resolved memory chat.", { from: rawChatId, to: chat.id });
+        }
 
-      memorySync = new MemorySync(memBot, config.memory, logger);
-      memoryStore = new MemoryStore();
+        memorySync = new MemorySync(memBot, config.memory, logger);
+        memoryStore = new MemoryStore();
 
-      if (config.memory.extraction) {
-        memoryExtractor = new MemoryExtractor(config.memory.extraction, logger);
-        logger.info("Memory extraction enabled.", { provider: config.memory.extraction.provider, model: config.memory.extraction.model });
-      } else {
-        logger.info("No extraction LLM configured — set ANTHROPIC_API_KEY or OPENAI_BASE_URL + OPENAI_API_KEY to enable automatic memory extraction.");
-      }
+        if (config.memory.extraction) {
+          memoryExtractor = new MemoryExtractor(config.memory.extraction, logger);
+          logger.info("Memory extraction enabled.", { provider: config.memory.extraction.provider, model: config.memory.extraction.model });
+        } else {
+          logger.info("No extraction LLM configured — set ANTHROPIC_API_KEY or OPENAI_BASE_URL + OPENAI_API_KEY to enable automatic memory extraction.");
+        }
 
-      const snapshot = await memorySync.load();
-      if (snapshot) {
-        memoryStore.load(snapshot);
-        logger.info("Memory loaded from Telegram.", { facts: memoryStore.all().length });
-      } else {
-        // Initialize empty memory and pin it
-        await memorySync.save(memoryStore.snapshot());
-        logger.info("Memory initialized (empty).");
+        const snapshot = await memorySync.load();
+        if (snapshot) {
+          memoryStore.load(snapshot);
+          logger.info("Memory loaded from Telegram.", { facts: memoryStore.all().length });
+        } else {
+          // Initialize empty memory and pin it
+          await memorySync.save(memoryStore.snapshot());
+          logger.info("Memory initialized (empty).");
+        }
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "unknown";
+        logger.warn("Memory initialization failed — continuing without memory.", { reason });
+        memoryStore = undefined;
+        memorySync = undefined;
+        memoryExtractor = undefined;
       }
     } else {
       logger.warn("Memory enabled but no Telegram channel configured — skipping memory.");
