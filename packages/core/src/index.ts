@@ -62,10 +62,13 @@ export async function startDaemon(): Promise<void> {
             : undefined;
           const cached = cacheStore?.get(rawChatId);
 
-          if (cached) {
+          if (typeof cached === "string" && /^-?\d+$/.test(cached)) {
             config.memory.chatId = cached;
             logger.info("Using cached memory chat ID.", { from: rawChatId, to: cached });
           } else {
+            if (cached != null) {
+              logger.warn("Ignoring invalid cached memory chat ID.", { from: rawChatId, cached });
+            }
             const chat = await memBot.api.getChat(rawChatId);
             config.memory.chatId = String(chat.id);
             cacheStore?.set(rawChatId, String(chat.id));
