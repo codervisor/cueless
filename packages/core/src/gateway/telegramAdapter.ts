@@ -152,6 +152,16 @@ export class TelegramAdapter implements IMAdapter {
     await this.bot.api.editMessageText(Number(chatId), messageId, text, { parse_mode: "HTML" });
   }
 
+  async editMessageWithMarkup(chatId: string, messageId: number, text: string, markup: unknown): Promise<void> {
+    if (!this.bot) {
+      throw new Error("Telegram bot not started.");
+    }
+    await this.bot.api.editMessageText(Number(chatId), messageId, text, {
+      parse_mode: "HTML",
+      reply_markup: markup as Parameters<Bot["api"]["editMessageText"]>[3] extends { reply_markup?: infer R } ? R : never,
+    });
+  }
+
   async deleteMessage(chatId: string, messageId: number): Promise<void> {
     if (!this.bot) {
       throw new Error("Telegram bot not started.");
