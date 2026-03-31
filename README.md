@@ -57,7 +57,7 @@ Set environment variables in `.env` or your deployment platform (Railway, Docker
 | DEFAULT_AGENT       | default  | Default agent name                 |
 | LOG_LEVEL           | info     | Log verbosity (`debug`, `info`, `warn`, `error`) |
 
-¹ Defaults to `/data` automatically when the directory exists (Docker/Railway). No default outside containers.
+¹ Defaults to `/data` automatically whenever the `/data` directory exists (commonly in Docker/Railway/containerized environments).
 
 Supported runtimes: `cli`, `session-claude`, `session-claude-sdk`, `session-gemini`, `session-copilot`.
 
@@ -167,7 +167,7 @@ Both the CLI gateway and the web frontend run in the same container. The web UI 
 1. Create a new project on [Railway](https://railway.app) and connect the GitHub repo.
 2. Railway picks up `railway.toml` automatically — no manual settings needed.
 3. Add your environment variables (see [Configuration](#configuration) above).
-4. **Add a volume** — in the Railway dashboard, go to your service → **Settings → Volumes**, click **Add Volume**, and set the mount path to `/data`. This gives the container persistent storage for SQLite databases, agent session data, and any files the agent writes. Without a volume, all data is lost on each redeploy. The agent automatically uses `/data` as its working directory when the volume is mounted.
+4. **Add a volume** — in the Railway dashboard, go to your service → **Settings → Volumes**, click **Add Volume**, and set the mount path to `/data`. This gives the container persistent storage for SQLite databases, agent session data, and any files the agent writes. Without a volume, all data is lost on each redeploy. The agent uses `/data` as its working directory whenever that directory exists; mounting a volume at `/data` makes this data persistent across redeploys.
 5. Deploy.
 
 Alternatively, use the Railway CLI:
