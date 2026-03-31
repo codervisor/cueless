@@ -5,9 +5,16 @@ import { IMAdapter, IMAdapterStartOptions, IMMessage } from "../gateway/types";
 import { Logger } from "../logging";
 import { MemoryStore, formatMemoryList } from "../memory";
 import { MemorySync } from "../memory/sync";
+import { FileSessionStore } from "../runtime/session/fileSessionStore";
 import { ChunkThrottler } from "./chunkThrottler";
 import { ExecutionRegistry, InMemoryExecutionRegistry } from "./executionRegistry";
 import { markdownToTelegramHtml } from "./markdownToHtml";
+import {
+  MEMORY_CALLBACK_PREFIX,
+  buildMemoryListMarkup,
+  buildClearConfirmMarkup,
+  buildChannelInfoMarkup,
+} from "./memoryMarkup";
 import { PermissionBridge } from "./permissionBridge";
 import { Router } from "./router";
 
@@ -56,6 +63,8 @@ type BuiltinCommand =
   | { type: "memory-edit"; id: string; text: string }
   | { type: "memory-delete"; id: string }
   | { type: "memory-export" }
+  | { type: "memory-clear" }
+  | { type: "memory-channel" }
   | null;
 
 export const parseBuiltinCommand = (text: string): BuiltinCommand => {
@@ -93,6 +102,14 @@ export const parseBuiltinCommand = (text: string): BuiltinCommand => {
 
   if (/^\/memory\s+export\s*$/i.test(trimmed)) {
     return { type: "memory-export" };
+  }
+
+  if (/^\/memory\s+clear\s*$/i.test(trimmed)) {
+    return { type: "memory-clear" };
+  }
+
+  if (/^\/memory\s+channel\s*$/i.test(trimmed)) {
+    return { type: "memory-channel" };
   }
 
   if (/^\/memory\s*$/i.test(trimmed)) {
@@ -169,6 +186,17 @@ const formatPermissionRequest = (toolName: string, toolInput: Record<string, unk
   );
 };
 
+export interface MemoryChannelInfo {
+  /** The resolved numeric chat ID currently in use. */
+  resolvedChatId: string;
+  /** The raw configured value (e.g. @my_agent_memory). */
+  rawChatId?: string;
+  /** How the chat ID was obtained. */
+  cacheSource?: "cached" | "resolved" | "direct";
+  /** Cache store for flushing entries. */
+  cacheStore?: FileSessionStore;
+}
+
 export class ChannelHub {
   private readonly adapters = new Map<string, IMAdapter>();
   private readonly executionRegistry: ExecutionRegistry;
@@ -188,7 +216,8 @@ export class ChannelHub {
     private readonly logger: Logger,
     executionRegistry?: ExecutionRegistry,
     private readonly memoryStore?: MemoryStore,
-    private readonly memorySync?: MemorySync
+    private readonly memorySync?: MemorySync,
+    private readonly memoryChannelInfo?: MemoryChannelInfo
   ) {
     this.executionRegistry = executionRegistry ?? new InMemoryExecutionRegistry();
     this.permissionBridge = new PermissionBridge(logger);
@@ -348,6 +377,11 @@ export class ChannelHub {
   }
 
   private async handleCallbackQuery(message: IMMessage): Promise<void> {
+    if (message.callbackData?.startsWith(MEMORY_CALLBACK_PREFIX)) {
+      await this.handleMemoryCallback(message);
+      return;
+    }
+
     if (!message.callbackData?.startsWith(PERMISSION_CALLBACK_PREFIX)) {
       return;
     }
@@ -380,6 +414,156 @@ export class ChannelHub {
         // Non-critical — message may have been deleted
       });
     }
+  }
+
+  private async handleMemoryCallback(message: IMMessage): Promise<void> {
+    const adapter = this.adapters.get(message.channelId);
+    if (!adapter) return;
+
+    const data = message.callbackData!.slice(MEMORY_CALLBACK_PREFIX.length);
+    const [action, ...rest] = data.split(":");
+    const param = rest.join(":");
+
+    const ack = async (text?: string) => {
+      if (adapter.answerCallbackQuery && message.callbackQueryId) {
+        await adapter.answerCallbackQuery(message.callbackQueryId, text);
+      }
+    };
+
+    const editMarkup = async (text: string, markup: unknown) => {
+      if (adapter.editMessageWithMarkup && message.messageId) {
+        await adapter.editMessageWithMarkup(message.chatId, message.messageId, text, markup).catch(() => {});
+      } else if (adapter.editMessage && message.messageId) {
+        await adapter.editMessage(message.chatId, message.messageId, text).catch(() => {});
+      }
+    };
+
+    if (action === "noop") {
+      await ack();
+      return;
+    }
+
+    if (action === "delete") {
+      if (!this.memoryStore || !this.memorySync) {
+        await ack("Memory not configured.");
+        return;
+      }
+      const factId = param;
+      if (this.memoryStore.remove(factId)) {
+        await this.memorySync.save(this.memoryStore.snapshot());
+        await ack(`Deleted ${factId}`);
+        // Re-render the list in-place
+        const { text, markup } = buildMemoryListMarkup(this.memoryStore.all());
+        await editMarkup(text, markup);
+      } else {
+        await ack(`Unknown: ${factId}`);
+      }
+      return;
+    }
+
+    if (action === "page") {
+      if (!this.memoryStore) {
+        await ack("Memory not configured.");
+        return;
+      }
+      const page = parseInt(param, 10) || 0;
+      const { text, markup } = buildMemoryListMarkup(this.memoryStore.all(), page);
+      await editMarkup(text, markup);
+      await ack();
+      return;
+    }
+
+    if (action === "clear") {
+      if (!this.memoryStore || !this.memorySync) {
+        await ack("Memory not configured.");
+        return;
+      }
+
+      if (param === "prompt") {
+        const count = this.memoryStore.all().length;
+        if (count === 0) {
+          await ack("No memories to clear.");
+          return;
+        }
+        const { text, markup } = buildClearConfirmMarkup(count);
+        await editMarkup(text, markup);
+        await ack();
+        return;
+      }
+
+      if (param === "confirm") {
+        this.memoryStore.clear();
+        await this.memorySync.save(this.memoryStore.snapshot());
+        await ack("All memories cleared.");
+        const { text, markup } = buildMemoryListMarkup(this.memoryStore.all());
+        await editMarkup(text, markup);
+        return;
+      }
+
+      if (param === "cancel") {
+        // Re-render the list
+        const { text, markup } = buildMemoryListMarkup(this.memoryStore.all());
+        await editMarkup(text, markup);
+        await ack("Cancelled.");
+        return;
+      }
+      return;
+    }
+
+    if (action === "export") {
+      if (!this.memoryStore) {
+        await ack("Memory not configured.");
+        return;
+      }
+      if (adapter.sendDocument) {
+        const json = this.memoryStore.toJSON();
+        await adapter.sendDocument(message.chatId, Buffer.from(json, "utf-8"), {
+          fileName: "memory.json",
+          caption: `${this.memoryStore.all().length} facts exported.`,
+        });
+      }
+      await ack();
+      return;
+    }
+
+    if (action === "channel") {
+      if (!this.memoryChannelInfo) {
+        await ack("No channel info available.");
+        return;
+      }
+      const { text, markup } = buildChannelInfoMarkup(
+        this.memoryChannelInfo.resolvedChatId,
+        this.memoryChannelInfo.rawChatId,
+        this.memoryChannelInfo.cacheSource
+      );
+      await editMarkup(text, markup);
+      await ack();
+      return;
+    }
+
+    if (action === "cache") {
+      if (param === "flush") {
+        if (!this.memoryChannelInfo?.cacheStore || !this.memoryChannelInfo.rawChatId) {
+          await ack("No cache to flush.");
+          return;
+        }
+        this.memoryChannelInfo.cacheStore.delete(this.memoryChannelInfo.rawChatId);
+        this.logger.info("Memory chat ID cache flushed.", { rawChatId: this.memoryChannelInfo.rawChatId });
+        await ack("Cache flushed!");
+        if (adapter.editMessage && message.messageId) {
+          await adapter.editMessage(
+            message.chatId,
+            message.messageId,
+            "🔄 <b>Cache flushed.</b>\n\nThe memory chat ID cache has been cleared. Restart the bot to re-resolve the channel."
+          ).catch(() => {});
+        }
+        return;
+      }
+      return;
+    }
+
+    // Unknown callback — just acknowledge
+    await ack();
   }
 
   private async tryCreateForumTopic(
@@ -772,8 +956,13 @@ export class ChannelHub {
         await adapter.sendMessage(message.chatId, "Memory is not configured. Set MEMORY_CHAT_ID to enable.");
         return;
       }
-      const html = formatMemoryList(this.memoryStore.all());
-      await adapter.sendMessage(message.chatId, html);
+      if (adapter.sendMessageWithMarkup) {
+        const { text, markup } = buildMemoryListMarkup(this.memoryStore.all());
+        await adapter.sendMessageWithMarkup(message.chatId, text, markup);
+      } else {
+        const html = formatMemoryList(this.memoryStore.all());
+        await adapter.sendMessage(message.chatId, html);
+      }
       return;
     }
 
@@ -814,6 +1003,50 @@ export class ChannelHub {
         await adapter.sendMessage(message.chatId, `Deleted <code>${command.id}</code>.`);
       } else {
         await adapter.sendMessage(message.chatId, `Unknown memory ID: ${command.id}`);
+      }
+      return;
+    }
+
+    if (command.type === "memory-clear") {
+      if (!this.memoryStore || !this.memorySync) {
+        await adapter.sendMessage(message.chatId, "Memory is not configured.");
+        return;
+      }
+      const count = this.memoryStore.all().length;
+      if (count === 0) {
+        await adapter.sendMessage(message.chatId, "No memories to clear.");
+        return;
+      }
+      if (adapter.sendMessageWithMarkup) {
+        const { text, markup } = buildClearConfirmMarkup(count);
+        await adapter.sendMessageWithMarkup(message.chatId, text, markup);
+      } else {
+        // No inline keyboard support — clear directly
+        this.memoryStore.clear();
+        await this.memorySync.save(this.memoryStore.snapshot());
+        await adapter.sendMessage(message.chatId, `Cleared all ${count} facts.`);
+      }
+      return;
+    }
+
+    if (command.type === "memory-channel") {
+      if (!this.memoryChannelInfo) {
+        await adapter.sendMessage(message.chatId, "No memory channel info available.");
+        return;
+      }
+      if (adapter.sendMessageWithMarkup) {
+        const { text, markup } = buildChannelInfoMarkup(
+          this.memoryChannelInfo.resolvedChatId,
+          this.memoryChannelInfo.rawChatId,
+          this.memoryChannelInfo.cacheSource
+        );
+        await adapter.sendMessageWithMarkup(message.chatId, text, markup);
+      } else {
+        await adapter.sendMessage(
+          message.chatId,
+          `Memory channel: ${this.memoryChannelInfo.resolvedChatId}` +
+          (this.memoryChannelInfo.rawChatId ? ` (configured as ${this.memoryChannelInfo.rawChatId})` : "")
+        );
       }
       return;
     }

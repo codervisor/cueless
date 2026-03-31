@@ -79,6 +79,11 @@ export class MemoryStore {
     );
   }
 
+  clear(): void {
+    this.facts.clear();
+    this.nextId = 1;
+  }
+
   isEmpty(): boolean {
     return this.facts.size === 0;
   }

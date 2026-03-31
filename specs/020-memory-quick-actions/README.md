@@ -1,5 +1,5 @@
 ---
-status: draft
+status: in-progress
 created: 2026-03-31
 priority: medium
 tags:
@@ -9,7 +9,10 @@ tags:
 - inline-keyboard
 parent: 019-persistent-memory
 created_at: 2026-03-31T01:50:06.847818857Z
-updated_at: 2026-03-31T01:50:06.847818857Z
+updated_at: 2026-03-31T02:07:54.432289864Z
+transitions:
+- status: in-progress
+  at: 2026-03-31T02:07:54.432289864Z
 ---
 
 # Memory Quick Actions & Cache Management
@@ -96,17 +99,17 @@ If facts > 8, paginate with 8 per page. Footer shows `[◀ Prev] [Page 1/3] [Nex
 
 ## Plan
 
-- [ ] Extend `parseBuiltinCommand()` with `memory-clear` and `memory-channel` types
-- [ ] Create `buildMemoryListMarkup(facts, page)` → returns `{ text, markup }` with inline keyboard
-- [ ] Create `buildChannelInfoMarkup(config, cacheStore)` → returns channel info with flush button
-- [ ] Refactor `/memory` handler to use `sendMessageWithMarkup()` when adapter supports it
-- [ ] Add `handleMemoryCallback(adapter, message)` to route `mem:*` callbacks
-- [ ] Extend `handleCallbackQuery()` to dispatch `mem:*` alongside `perm:*`
-- [ ] Implement delete-via-button (edit message to remove fact, re-render list)
-- [ ] Implement clear-all flow (confirm → bulk delete → edit message)
-- [ ] Implement channel-info with flush-cache button
-- [ ] Add pagination for large fact lists (>8 facts)
-- [ ] Expose `FileSessionStore.delete()` to hub for cache flush (already exists on the class)
+- [x] Extend `parseBuiltinCommand()` with `memory-clear` and `memory-channel` types
+- [x] Create `buildMemoryListMarkup(facts, page)` → returns `{ text, markup }` with inline keyboard
+- [x] Create `buildChannelInfoMarkup(config, cacheStore)` → returns channel info with flush button
+- [x] Refactor `/memory` handler to use `sendMessageWithMarkup()` when adapter supports it
+- [x] Add `handleMemoryCallback(adapter, message)` to route `mem:*` callbacks
+- [x] Extend `handleCallbackQuery()` to dispatch `mem:*` alongside `perm:*`
+- [x] Implement delete-via-button (edit message to remove fact, re-render list)
+- [x] Implement clear-all flow (confirm → bulk delete → edit message)
+- [x] Implement channel-info with flush-cache button
+- [x] Add pagination for large fact lists (>8 facts)
+- [x] Expose `FileSessionStore.delete()` to hub for cache flush (already exists on the class)
 
 ## Test
 

@@ -35,6 +35,7 @@ export interface IMAdapter {
   // Rich features (optional — adapters that don't support them leave them undefined)
   sendMessageWithMarkup?: (chatId: string, text: string, markup: unknown, options?: { threadId?: number }) => Promise<number>;
   editMessage?: (chatId: string, messageId: number, text: string) => Promise<void>;
+  editMessageWithMarkup?: (chatId: string, messageId: number, text: string, markup: unknown) => Promise<void>;
   deleteMessage?: (chatId: string, messageId: number) => Promise<void>;
   answerCallbackQuery?: (callbackQueryId: string, text?: string) => Promise<void>;
   sendDocument?: (chatId: string, file: Buffer | string, options?: { caption?: string; fileName?: string; threadId?: number }) => Promise<void>;

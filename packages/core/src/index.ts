@@ -4,7 +4,7 @@ import { ChannelConfig } from "./config";
 import { EventBus } from "./events/eventBus";
 import { TelegramAdapter } from "./gateway/telegramAdapter";
 import { IMAdapter } from "./gateway/types";
-import { ChannelHub } from "./hub/hub";
+import { ChannelHub, MemoryChannelInfo } from "./hub/hub";
 import { DefaultRouter } from "./hub/router";
 import { createLogger } from "./logging";
 import { MemoryStore } from "./memory";
@@ -44,6 +44,7 @@ export async function startDaemon(): Promise<void> {
   let memoryStore: MemoryStore | undefined;
   let memorySync: MemorySync | undefined;
   let memoryExtractor: MemoryExtractor | undefined;
+  let memoryChannelInfo: MemoryChannelInfo | undefined;
 
   if (config.memory?.enabled) {
     // We need a Bot instance for MemorySync — get the token from the first Telegram channel
@@ -65,6 +66,7 @@ export async function startDaemon(): Promise<void> {
           if (typeof cached === "string" && /^-?\d+$/.test(cached)) {
             config.memory.chatId = cached;
             logger.info("Using cached memory chat ID.", { from: rawChatId, to: cached });
+            memoryChannelInfo = { resolvedChatId: cached, rawChatId, cacheSource: "cached", cacheStore };
           } else {
             if (cached != null) {
               logger.warn("Ignoring invalid cached memory chat ID.", { from: rawChatId, cached });
@@ -73,7 +75,10 @@ export async function startDaemon(): Promise<void> {
             config.memory.chatId = String(chat.id);
             cacheStore?.set(rawChatId, String(chat.id));
             logger.info("Resolved memory chat.", { from: rawChatId, to: chat.id });
+            memoryChannelInfo = { resolvedChatId: String(chat.id), rawChatId, cacheSource: "resolved", cacheStore };
           }
+        } else {
+          memoryChannelInfo = { resolvedChatId: rawChatId, cacheSource: "direct" };
         }
 
         memorySync = new MemorySync(memBot, config.memory, logger);
@@ -101,6 +106,7 @@ export async function startDaemon(): Promise<void> {
         memoryStore = undefined;
         memorySync = undefined;
         memoryExtractor = undefined;
+        memoryChannelInfo = undefined;
       }
     } else {
       logger.warn("Memory enabled but no Telegram channel configured — skipping memory.");
@@ -111,7 +117,7 @@ export async function startDaemon(): Promise<void> {
 
   const adapters = config.channels.map((channel) => createAdapter(channel, logger));
   const router = new DefaultRouter(config.channels, registry);
-  const hub = new ChannelHub(adapters, router, eventBus, logger, undefined, memoryStore, memorySync);
+  const hub = new ChannelHub(adapters, router, eventBus, logger, undefined, memoryStore, memorySync, memoryChannelInfo);
 
   await hub.start();
 
