@@ -167,6 +167,10 @@ const DEFAULT_SYSTEM_PROMPT = [
   "Remember context from earlier messages in our conversation.",
 ].join(" ");
 
+/** Returns `/data` when the directory exists (e.g. inside the Docker image), otherwise undefined. */
+export const defaultWorkingDir = (dirExists: (path: string) => boolean = existsSync): string | undefined =>
+  dirExists("/data") ? "/data" : undefined;
+
 const parseAgents = (): AgentConfig[] => {
   const runtime = parseRuntime(process.env.RUNTIME_TYPE);
 
@@ -184,7 +188,7 @@ const parseAgents = (): AgentConfig[] => {
     name: process.env.DEFAULT_AGENT || "default",
     runtime,
     command,
-    workingDir: process.env.RUNTIME_WORKING_DIR || (existsSync("/data") ? "/data" : undefined),
+    workingDir: process.env.RUNTIME_WORKING_DIR || defaultWorkingDir(),
     timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 10 * 60 * 1000,
     maxTurns: maxTurns && Number.isFinite(maxTurns) ? maxTurns : undefined,
     model: process.env.CLAUDE_MODEL,

@@ -1,6 +1,6 @@
 import assert from "assert";
 import test from "node:test";
-import { loadConfig } from "../src/config";
+import { defaultWorkingDir, loadConfig } from "../src/config";
 
 /**
  * Helper: run loadConfig with the given env vars, restoring originals afterward.
@@ -62,4 +62,12 @@ test("loadConfig trims whitespace from TELEGRAM_CHANNEL_ID", () => {
     const config = loadConfig();
     assert.equal(config.channels[0].id, "my-bot");
   });
+});
+
+test("defaultWorkingDir returns /data when directory exists", () => {
+  assert.equal(defaultWorkingDir(() => true), "/data");
+});
+
+test("defaultWorkingDir returns undefined when directory does not exist", () => {
+  assert.equal(defaultWorkingDir(() => false), undefined);
 });
