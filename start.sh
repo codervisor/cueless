@@ -1,5 +1,27 @@
 #!/bin/bash
 
+# ── Fix volume permissions as root, then drop to the claude user ────────────
+# Railway (and Docker) volumes mount as root, overriding the Dockerfile's chown.
+# A non-root user cannot chown a root-owned directory, so we must fix permissions
+# while still running as root, then re-exec this script as the `claude` user.
+if [ "$(id -u)" = "0" ]; then
+  # Detect whether /data is an actual mount point (volume)
+  _data_is_volume() {
+    { command -v mountpoint >/dev/null 2>&1 && mountpoint -q /data; } ||
+      grep -qE ' /data(/| )' /proc/self/mountinfo 2>/dev/null
+  }
+
+  if _data_is_volume; then
+    echo "[telegramable] Fixing /data volume permissions for claude user..."
+    chown -R claude:claude /data 2>/dev/null || true
+  fi
+
+  # Re-exec this script as the claude user (continues below)
+  exec su claude -s /bin/bash -c "$0"
+fi
+
+# ── Everything below runs as the `claude` user ──────────────────────────────
+
 # ── Persist Claude Code sessions across container restarts ──────────────────
 # Claude Code stores conversation history and session data in ~/.claude.
 # When a Railway Volume (or Docker volume) is mounted at /data, we symlink
@@ -16,31 +38,24 @@ data_is_volume() {
 }
 
 if data_is_volume; then
-  # Ensure the data directory is writable by the current user.
-  # Railway volumes are created as root; the Dockerfile's chown is overridden by the mount.
-  if [ ! -w /data ]; then
-    echo "[telegramable] Fixing /data permissions for $(whoami)..."
-    # Fix ownership of the mountpoint so we can create files/subdirectories.
-    # Uses -R to also cover existing nested files from prior deploys.
-    chown -R "$(id -u):$(id -g)" /data 2>/dev/null || true
-  fi
+  # Ensure the persistent directory exists (should succeed now that root fixed ownership)
+  if ! mkdir -p "$PERSIST_DIR" 2>/dev/null; then
+    echo "[telegramable] WARNING: Cannot create $PERSIST_DIR — Claude Code sessions will be ephemeral"
+  else
+    # If ~/.claude already exists (from the install step) and is NOT a symlink,
+    # seed the persistent dir with any existing content, then replace with symlink.
+    if [ -e "$CLAUDE_HOME" ] && [ ! -L "$CLAUDE_HOME" ]; then
+      cp -a "$CLAUDE_HOME/." "$PERSIST_DIR/" 2>/dev/null || true
+      rm -rf "$CLAUDE_HOME"
+    fi
 
-  # Ensure the persistent directory exists
-  mkdir -p "$PERSIST_DIR"
-
-  # If ~/.claude already exists (from the install step) and is NOT a symlink,
-  # seed the persistent dir with any existing content, then replace with symlink.
-  if [ -e "$CLAUDE_HOME" ] && [ ! -L "$CLAUDE_HOME" ]; then
-    cp -a "$CLAUDE_HOME/." "$PERSIST_DIR/" 2>/dev/null || true
-    rm -rf "$CLAUDE_HOME"
+    # Create the symlink (idempotent — remove stale entry first)
+    if [ -e "$CLAUDE_HOME" ] || [ -L "$CLAUDE_HOME" ]; then
+      rm -rf "$CLAUDE_HOME"
+    fi
+    ln -s "$PERSIST_DIR" "$CLAUDE_HOME"
+    echo "[telegramable] Claude Code sessions will persist at $PERSIST_DIR"
   fi
-
-  # Create the symlink (idempotent — remove stale entry first)
-  if [ -e "$CLAUDE_HOME" ] || [ -L "$CLAUDE_HOME" ]; then
-    rm -rf "$CLAUDE_HOME"
-  fi
-  ln -s "$PERSIST_DIR" "$CLAUDE_HOME"
-  echo "[telegramable] Claude Code sessions will persist at $PERSIST_DIR"
 else
   echo "[telegramable] No /data volume detected — Claude Code sessions will be ephemeral"
 fi
