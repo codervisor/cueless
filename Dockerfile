@@ -63,5 +63,8 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-USER claude
+# NOTE: We intentionally do NOT set `USER claude` here.
+# start.sh runs as root to fix /data volume permissions (Railway volumes mount
+# as root, overriding the Dockerfile's chown), then drops to the `claude` user
+# via `exec su claude …` before starting the application processes.
 CMD ["./start.sh"]
