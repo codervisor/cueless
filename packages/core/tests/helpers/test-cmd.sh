@@ -25,5 +25,12 @@ case "$mode" in
     exit 1
     ;;
   hang)          sleep 60 ;;
+  slow)
+    # Sleep briefly then echo the last arg (for serialization tests)
+    sleep 0.1
+    last=
+    for last; do :; done
+    printf '%s\n' "$last"
+    ;;
   *)             echo "unknown mode: $mode" >&2; exit 2 ;;
 esac

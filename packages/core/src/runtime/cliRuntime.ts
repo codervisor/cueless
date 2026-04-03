@@ -28,6 +28,8 @@ export interface CliRuntimeOptions {
 export class CliRuntime implements Runtime {
   /** Map of "channelId::chatId" → Claude CLI session ID for conversation continuity. */
   private readonly sessions = new Map<string, string>();
+  /** Per-session execution queue to serialize sequential messages and prevent concurrent CLI processes on the same session. */
+  private readonly executionQueues = new Map<string, Promise<void>>();
   private readonly fileStore?: FileSessionStore;
   private readonly getSystemPromptSuffix?: () => string;
   private readonly memoryStore?: MemoryStore;
@@ -268,7 +270,14 @@ export class CliRuntime implements Runtime {
   }
 
   async execute(message: IMMessage, executionId: string, eventBus: EventBus): Promise<void> {
-    return this._execute(message, executionId, eventBus, false);
+    const queueKey = `${message.channelId}::${message.chatId}`;
+    const prev = this.executionQueues.get(queueKey) ?? Promise.resolve();
+    const next = prev.then(
+      () => this._execute(message, executionId, eventBus, false),
+      () => this._execute(message, executionId, eventBus, false)
+    );
+    this.executionQueues.set(queueKey, next.catch(() => {}));
+    return next;
   }
 
   private async _execute(message: IMMessage, executionId: string, eventBus: EventBus, isRetry: boolean): Promise<void> {
