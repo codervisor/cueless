@@ -308,6 +308,56 @@ test("CliRuntime retries with fresh session when resume fails with 'No conversat
   assert.ok(!lastComplete?.payload?.response?.includes("--resume"), "retry should not use --resume");
 });
 
+// ---------- sequential execution ----------
+
+test("CliRuntime serializes sequential messages for the same chat", async () => {
+  const config: AgentConfig = { name: "serial-agent", command: TEST_CMD, args: ["slow"] };
+  const runtime = new CliRuntime(config, logger);
+
+  const order: string[] = [];
+
+  const run = async (text: string, execId: string) => {
+    const eb = new EventBus();
+    const events = collect(eb);
+    await runtime.execute(msg({ text }), execId, eb);
+    const complete = events.find((e) => e.type === "complete");
+    order.push(complete?.payload?.response as string);
+  };
+
+  // Fire three messages concurrently — they should still execute in order
+  await Promise.all([
+    run("first", "exec-seq-1"),
+    run("second", "exec-seq-2"),
+    run("third", "exec-seq-3")
+  ]);
+
+  assert.deepStrictEqual(order, ["first", "second", "third"],
+    "messages should be processed in order, not concurrently");
+});
+
+test("CliRuntime allows concurrent execution for different chats", async () => {
+  const config: AgentConfig = { name: "parallel-agent", command: TEST_CMD, args: ["slow"] };
+  const runtime = new CliRuntime(config, logger);
+
+  const starts: Map<string, number> = new Map();
+
+  const run = async (chatId: string, execId: string) => {
+    starts.set(chatId, Date.now());
+    const eb = new EventBus();
+    await runtime.execute(msg({ chatId, text: chatId }), execId, eb);
+  };
+
+  // Different chats should run concurrently
+  await Promise.all([
+    run("chat-X", "exec-par-1"),
+    run("chat-Y", "exec-par-2")
+  ]);
+
+  // Both should have started at roughly the same time (within 50ms)
+  const diff = Math.abs((starts.get("chat-X") ?? 0) - (starts.get("chat-Y") ?? 0));
+  assert.ok(diff < 50, `different chats should start concurrently (diff=${diff}ms)`);
+});
+
 // ---------- event metadata ----------
 
 test("CliRuntime events carry correct channelId, chatId, executionId", async () => {
