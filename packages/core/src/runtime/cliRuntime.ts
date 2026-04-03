@@ -38,6 +38,9 @@ export class CliRuntime implements Runtime {
   /** Resolve the path to the compiled memoryMcpStdio.js once. */
   private memoryMcpStdioPath?: string;
 
+  /** Prevent repeated root-fallback warnings from flooding logs. */
+  private rootWarningLogged = false;
+
   constructor(private readonly config: AgentConfig, private readonly logger: Logger, options?: CliRuntimeOptions) {
     if (options?.dataDir) {
       this.fileStore = new FileSessionStore(options.dataDir, "cli-sessions.json", logger);
@@ -47,6 +50,19 @@ export class CliRuntime implements Runtime {
     this.memorySync = options?.memorySync;
     this.memoryExtractor = options?.memoryExtractor;
     this.useAgentDrivenMemory = options?.useAgentDrivenMemory ?? false;
+
+    // Warn about config fields that are silently ignored by the CLI runtime.
+    // These fields exist on AgentConfig for other runtimes (SDK, session-claude)
+    // but the CLI runtime always uses bypassPermissions.
+    if (config.permissionMode && config.permissionMode !== "bypassPermissions") {
+      this.logger.warn("CLI runtime ignores PERMISSION_MODE — always uses bypassPermissions (non-root) or auto (root).", { configured: config.permissionMode });
+    }
+    if (config.allowedTools?.length) {
+      this.logger.warn("CLI runtime ignores ALLOWED_TOOLS — bypassPermissions approves all tools.", { tools: config.allowedTools });
+    }
+    if (config.disallowedTools?.length) {
+      this.logger.warn("CLI runtime ignores DISALLOWED_TOOLS — bypassPermissions approves all tools.", { tools: config.disallowedTools });
+    }
   }
 
   /**
@@ -84,10 +100,13 @@ export class CliRuntime implements Runtime {
     // and no proper HITL flow exists for interactive approval in --print mode.
     // The root guard remains as a safety net for misconfigured environments.
     if (process.getuid?.() === 0) {
-      this.logger.warn(
-        "bypassPermissions is not allowed as root — falling back to 'auto'. " +
-        "Run the container as a non-root user to use bypassPermissions."
-      );
+      if (!this.rootWarningLogged) {
+        this.rootWarningLogged = true;
+        this.logger.warn(
+          "bypassPermissions is not allowed as root — falling back to 'auto'. " +
+          "Run the container as a non-root user to use bypassPermissions."
+        );
+      }
       args.push("--permission-mode", "auto");
     } else {
       args.push("--permission-mode", "bypassPermissions");
