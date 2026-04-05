@@ -21,9 +21,12 @@ export interface SudoRequest {
  */
 export class SudoWatcher {
   private watcher?: FSWatcher;
+  private pollInterval?: ReturnType<typeof setInterval>;
   private unsubscribe?: () => void;
   /** Track pending request IDs so we can write response files. */
   private readonly pending = new Map<string, SudoRequest>();
+  /** Track already-seen filenames to avoid reprocessing in poll. */
+  private readonly seen = new Set<string>();
 
   constructor(
     private readonly watchDir: string,
@@ -40,14 +43,33 @@ export class SudoWatcher {
     // Process any leftover .req files from before startup (edge case: restart)
     this.scanExisting();
 
-    // Watch for new .req files
-    this.watcher = watch(this.watchDir, (eventType, filename) => {
-      if (filename && filename.endsWith(".req") && eventType === "rename") {
-        const reqPath = join(this.watchDir, filename);
-        // Small delay to ensure the atomic rename has settled
-        setTimeout(() => this.processRequest(reqPath), 50);
-      }
-    });
+    // Watch for new .req files — accept both "rename" and "change" events
+    // because fs.watch behavior is platform-dependent (Linux may emit "change"
+    // for renames in some configurations, especially inside Docker).
+    try {
+      this.watcher = watch(this.watchDir, (eventType, filename) => {
+        if (filename && filename.endsWith(".req")) {
+          const reqPath = join(this.watchDir, filename);
+          // Small delay to ensure the atomic rename has settled
+          setTimeout(() => this.processRequest(reqPath), 50);
+        }
+      });
+
+      this.watcher.on("error", (err) => {
+        this.logger.warn("SudoWatcher fs.watch error — falling back to polling only.", {
+          reason: err instanceof Error ? err.message : "unknown"
+        });
+        this.watcher?.close();
+        this.watcher = undefined;
+      });
+    } catch (err) {
+      this.logger.warn("SudoWatcher fs.watch unavailable — using polling only.", {
+        reason: err instanceof Error ? err.message : "unknown"
+      });
+    }
+
+    // Poll as a safety net — fs.watch can be unreliable in containers.
+    this.pollInterval = setInterval(() => this.scanExisting(), 2_000);
 
     // Listen for permission-response events to write .res files
     this.unsubscribe = this.eventBus.on((event: ExecutionEvent) => {
@@ -66,6 +88,10 @@ export class SudoWatcher {
   stop(): void {
     this.watcher?.close();
     this.watcher = undefined;
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+      this.pollInterval = undefined;
+    }
     this.unsubscribe?.();
     this.unsubscribe = undefined;
 
@@ -74,6 +100,7 @@ export class SudoWatcher {
       this.writeResponse(requestId, "deny");
     }
     this.pending.clear();
+    this.seen.clear();
 
     this.logger.info("SudoWatcher stopped.");
   }
@@ -82,7 +109,9 @@ export class SudoWatcher {
     try {
       const files = readdirSync(this.watchDir).filter((f) => f.endsWith(".req"));
       for (const file of files) {
-        this.processRequest(join(this.watchDir, file));
+        if (!this.seen.has(file)) {
+          this.processRequest(join(this.watchDir, file));
+        }
       }
     } catch {
       // Directory may not exist yet
@@ -90,12 +119,21 @@ export class SudoWatcher {
   }
 
   private processRequest(reqPath: string): void {
+    const filename = reqPath.split("/").pop() || "";
+    // Skip if already seen (dedup between fs.watch and polling)
+    if (this.seen.has(filename)) return;
+    this.seen.add(filename);
+
     let request: SudoRequest;
     try {
-      if (!existsSync(reqPath)) return;
+      if (!existsSync(reqPath)) {
+        this.seen.delete(filename);
+        return;
+      }
       const raw = readFileSync(reqPath, "utf-8");
       request = JSON.parse(raw) as SudoRequest;
     } catch (err) {
+      this.seen.delete(filename);
       this.logger.warn("Failed to parse sudo request file.", {
         path: reqPath,
         reason: err instanceof Error ? err.message : "unknown"
@@ -104,6 +142,7 @@ export class SudoWatcher {
     }
 
     if (!request.id || !request.channelId || !request.chatId) {
+      this.seen.delete(filename);
       this.logger.warn("Sudo request missing required fields.", { request });
       return;
     }
@@ -149,8 +188,10 @@ export class SudoWatcher {
       });
     }
 
-    // Clean up the request file
-    const reqPath = join(this.watchDir, `${requestId}.req`);
+    // Clean up the request file and seen set
+    const reqFilename = `${requestId}.req`;
+    this.seen.delete(reqFilename);
+    const reqPath = join(this.watchDir, reqFilename);
     try { unlinkSync(reqPath); } catch { /* may already be deleted */ }
   }
 }
