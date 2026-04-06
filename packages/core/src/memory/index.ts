@@ -1,5 +1,9 @@
 export { MemoryStore, buildMemoryPrompt, formatMemoryList, TAG_ORDER } from "./store";
 export type { MemoryFact, MemoryTag, MemorySnapshot } from "./store";
+export type { MemoryProvider, MemoryChangelog } from "./provider";
+export { TelegramMemoryProvider } from "./telegramProvider";
+export { Mem0MemoryProvider } from "./mem0Provider";
+export type { Mem0Config } from "./mem0Provider";
 export { MemorySync } from "./sync";
 export type { MemoryConfig } from "./sync";
 export { MemoryExtractor } from "./extractor";

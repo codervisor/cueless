@@ -74,11 +74,21 @@ export interface MemoryExtractionConfig {
   baseUrl?: string; // For OpenAI-compatible endpoints (OpenRouter, local LLMs, etc.)
 }
 
+export type MemoryProviderType = "telegram" | "mem0";
+
+export interface Mem0ProviderConfig {
+  apiKey: string;
+  baseUrl?: string;
+  userId?: string; // defaults to "default"
+}
+
 export interface MemoryConfig {
   enabled: boolean;
+  provider: MemoryProviderType;
   chatId: string;
   topicId?: number;
   extraction?: MemoryExtractionConfig;
+  mem0?: Mem0ProviderConfig;
 }
 
 export interface Config {
@@ -208,6 +218,17 @@ export const loadConfig = (): Config => {
 
   const memoryChatId = process.env.MEMORY_CHAT_ID?.trim();
   const memoryTopicId = process.env.MEMORY_TOPIC_ID?.trim();
+  const memoryProvider = (process.env.MEMORY_PROVIDER?.trim() || "telegram") as MemoryProviderType;
+  const mem0ApiKey = process.env.MEM0_API_KEY?.trim();
+
+  const parseMem0Config = (): Mem0ProviderConfig | undefined => {
+    if (memoryProvider !== "mem0" || !mem0ApiKey) return undefined;
+    return {
+      apiKey: mem0ApiKey,
+      baseUrl: process.env.MEM0_BASE_URL?.trim() || undefined,
+      userId: process.env.MEM0_USER_ID?.trim() || "default",
+    };
+  };
 
   // Resolve memory extraction LLM — auto-detect from standard env vars:
   // 1. ANTHROPIC_API_KEY → Anthropic
@@ -244,12 +265,14 @@ export const loadConfig = (): Config => {
     defaultAgent: process.env.DEFAULT_AGENT,
     logLevel: parseLogLevel(process.env.LOG_LEVEL),
     dataDir: process.env.DATA_DIR || defaultWorkingDir() || undefined,
-    memory: memoryChatId
+    memory: (memoryChatId || memoryProvider === "mem0")
       ? {
           enabled: true,
-          chatId: memoryChatId,
+          provider: memoryProvider,
+          chatId: memoryChatId || "",
           topicId: memoryTopicId ? Number(memoryTopicId) : undefined,
           extraction: parseMemoryExtraction(),
+          mem0: parseMem0Config(),
         }
       : undefined,
   };

@@ -7,9 +7,11 @@ import { IMAdapter } from "./gateway/types";
 import { ChannelHub, MemoryChannelInfo } from "./hub/hub";
 import { DefaultRouter } from "./hub/router";
 import { createLogger } from "./logging";
-import { MemoryStore } from "./memory";
 import { MemoryExtractor } from "./memory/extractor";
+import { Mem0MemoryProvider } from "./memory/mem0Provider";
+import { MemoryProvider } from "./memory/provider";
 import { MemorySync } from "./memory/sync";
+import { TelegramMemoryProvider } from "./memory/telegramProvider";
 import { createAgentRegistry } from "./runtime";
 import { FileSessionStore } from "./runtime/session/fileSessionStore";
 
@@ -41,93 +43,100 @@ export async function startDaemon(): Promise<void> {
   }
 
   // Initialize memory system if configured
-  let memoryStore: MemoryStore | undefined;
+  let memoryProvider: MemoryProvider | undefined;
   let memorySync: MemorySync | undefined;
-  let memoryExtractor: MemoryExtractor | undefined;
   let memoryChannelInfo: MemoryChannelInfo | undefined;
 
-  logger.info("Memory configuration.", { enabled: !!config.memory?.enabled, hasChatId: !!config.memory?.chatId, hasExtraction: !!config.memory?.extraction });
+  logger.info("Memory configuration.", { enabled: !!config.memory?.enabled, provider: config.memory?.provider, hasChatId: !!config.memory?.chatId, hasExtraction: !!config.memory?.extraction });
 
   if (config.memory?.enabled) {
-    // We need a Bot instance for MemorySync — get the token from the first Telegram channel
-    const telegramChannel = config.channels.find((ch) => ch.type === "telegram");
-    if (telegramChannel && typeof telegramChannel.token === "string") {
-      try {
-        const memBot = new Bot(telegramChannel.token);
-        await memBot.init();
+    try {
+      if (config.memory.provider === "mem0" && config.memory.mem0) {
+        // Mem0 provider — no Telegram dependency for storage
+        memoryProvider = new Mem0MemoryProvider({
+          apiKey: config.memory.mem0.apiKey,
+          baseUrl: config.memory.mem0.baseUrl,
+          userId: config.memory.mem0.userId || "default",
+        }, logger);
 
-        // Resolve @username to numeric chat ID if needed.
-        // Cache resolved IDs so private chats work after initial resolution.
-        const rawChatId = config.memory.chatId;
-        if (rawChatId.startsWith("@") || !/^-?\d+$/.test(rawChatId)) {
-          const cacheStore = config.dataDir
-            ? new FileSessionStore(config.dataDir, "memory-chat-ids.json", logger)
-            : undefined;
-          if (!cacheStore) {
-            logger.warn(
-              "No DATA_DIR configured — resolved memory chat IDs will not persist across restarts. " +
-              "Set DATA_DIR or use a numeric chat ID to avoid re-resolution.",
-              { rawChatId }
-            );
-          }
-          const cached = cacheStore?.get(rawChatId);
+        await memoryProvider.load();
+        logger.info("Memory provider initialized.", { provider: "mem0" });
+      } else {
+        // Telegram provider (default) — needs a Bot instance for MemorySync
+        const telegramChannel = config.channels.find((ch) => ch.type === "telegram");
+        if (!telegramChannel || typeof telegramChannel.token !== "string") {
+          logger.warn("Memory enabled but no Telegram channel configured — skipping memory.");
+        } else {
+          const memBot = new Bot(telegramChannel.token);
+          await memBot.init();
 
-          if (typeof cached === "string" && /^-?\d+$/.test(cached)) {
-            config.memory.chatId = cached;
-            logger.info("Using cached memory chat ID.", { from: rawChatId, to: cached });
-            memoryChannelInfo = { resolvedChatId: cached, rawChatId, cacheSource: "cached", cacheStore };
-          } else {
-            if (cached != null) {
-              logger.warn("Ignoring invalid cached memory chat ID.", { from: rawChatId, cached });
+          // Resolve @username to numeric chat ID if needed.
+          const rawChatId = config.memory.chatId;
+          if (rawChatId.startsWith("@") || !/^-?\d+$/.test(rawChatId)) {
+            const cacheStore = config.dataDir
+              ? new FileSessionStore(config.dataDir, "memory-chat-ids.json", logger)
+              : undefined;
+            if (!cacheStore) {
+              logger.warn(
+                "No DATA_DIR configured — resolved memory chat IDs will not persist across restarts. " +
+                "Set DATA_DIR or use a numeric chat ID to avoid re-resolution.",
+                { rawChatId }
+              );
             }
-            const chat = await memBot.api.getChat(rawChatId);
-            config.memory.chatId = String(chat.id);
-            cacheStore?.set(rawChatId, String(chat.id));
-            logger.info("Resolved memory chat.", { from: rawChatId, to: chat.id });
-            memoryChannelInfo = { resolvedChatId: String(chat.id), rawChatId, cacheSource: "resolved", cacheStore };
+            const cached = cacheStore?.get(rawChatId);
+
+            if (typeof cached === "string" && /^-?\d+$/.test(cached)) {
+              config.memory.chatId = cached;
+              logger.info("Using cached memory chat ID.", { from: rawChatId, to: cached });
+              memoryChannelInfo = { resolvedChatId: cached, rawChatId, cacheSource: "cached", cacheStore };
+            } else {
+              if (cached != null) {
+                logger.warn("Ignoring invalid cached memory chat ID.", { from: rawChatId, cached });
+              }
+              const chat = await memBot.api.getChat(rawChatId);
+              config.memory.chatId = String(chat.id);
+              cacheStore?.set(rawChatId, String(chat.id));
+              logger.info("Resolved memory chat.", { from: rawChatId, to: chat.id });
+              memoryChannelInfo = { resolvedChatId: String(chat.id), rawChatId, cacheSource: "resolved", cacheStore };
+            }
+          } else {
+            memoryChannelInfo = { resolvedChatId: rawChatId, cacheSource: "direct" };
           }
-        } else {
-          memoryChannelInfo = { resolvedChatId: rawChatId, cacheSource: "direct" };
-        }
 
-        memorySync = new MemorySync(memBot, config.memory, logger);
-        memoryStore = new MemoryStore();
+          memorySync = new MemorySync(memBot, config.memory, logger);
 
-        if (config.memory.extraction) {
-          memoryExtractor = new MemoryExtractor(config.memory.extraction, logger);
-          logger.info("Memory extraction enabled.", { provider: config.memory.extraction.provider, model: config.memory.extraction.model });
-        } else {
-          logger.info("No extraction LLM configured — set ANTHROPIC_API_KEY or OPENAI_BASE_URL + OPENAI_API_KEY to enable automatic memory extraction.");
-        }
+          const extractor = config.memory.extraction
+            ? new MemoryExtractor(config.memory.extraction, logger)
+            : undefined;
 
-        const snapshot = await memorySync.load();
-        if (snapshot) {
-          memoryStore.load(snapshot);
-          logger.info("Memory loaded from Telegram.", { facts: memoryStore.all().length });
-        } else {
-          // Initialize empty memory and pin it
-          await memorySync.save(memoryStore.snapshot());
-          logger.info("Memory initialized (empty).");
+          if (config.memory.extraction) {
+            logger.info("Memory extraction enabled.", { provider: config.memory.extraction.provider, model: config.memory.extraction.model });
+          } else {
+            logger.info("No extraction LLM configured — set ANTHROPIC_API_KEY or OPENAI_BASE_URL + OPENAI_API_KEY to enable automatic memory extraction.");
+          }
+
+          const telegramProvider = new TelegramMemoryProvider(memorySync, extractor, logger);
+          await telegramProvider.load();
+
+          memoryProvider = telegramProvider;
+          logger.info("Memory provider initialized.", { provider: "telegram", facts: telegramProvider.all().length });
         }
-      } catch (error) {
-        const reason = error instanceof Error ? error.message : "unknown";
-        logger.warn("Memory initialization failed — continuing without memory.", { reason });
-        memoryStore = undefined;
-        memorySync = undefined;
-        memoryExtractor = undefined;
-        memoryChannelInfo = undefined;
       }
-    } else {
-      logger.warn("Memory enabled but no Telegram channel configured — skipping memory.");
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "unknown";
+      logger.warn("Memory initialization failed — continuing without memory.", { reason });
+      memoryProvider = undefined;
+      memorySync = undefined;
+      memoryChannelInfo = undefined;
     }
   }
 
-  logger.info("Creating agent registry.", { hasMemoryStore: !!memoryStore, hasMemorySync: !!memorySync, hasMemoryExtractor: !!memoryExtractor });
-  const registry = createAgentRegistry(config, logger, memoryStore, memorySync, memoryExtractor);
+  logger.info("Creating agent registry.", { hasMemoryProvider: !!memoryProvider });
+  const registry = createAgentRegistry(config, logger, memoryProvider);
 
   const adapters = config.channels.map((channel) => createAdapter(channel, logger));
   const router = new DefaultRouter(config.channels, registry);
-  const hub = new ChannelHub(adapters, router, eventBus, logger, undefined, memoryStore, memorySync, memoryChannelInfo);
+  const hub = new ChannelHub(adapters, router, eventBus, logger, undefined, memoryProvider, memoryChannelInfo, memorySync);
 
   await hub.start();
 
