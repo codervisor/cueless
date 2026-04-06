@@ -168,7 +168,10 @@ export class SdkClaudeSession implements AgentSession {
           includePartialMessages: true,
           permissionMode: "default",
           canUseTool: async (toolName: string, toolInput: Record<string, unknown>, opts: { signal: AbortSignal }) => {
-            return this.handlePermissionRequest(executionId, eventBus, toolName, toolInput, opts.signal);
+            resetTimeout(); // Permission request is activity — reset so user has time to respond
+            const result = await this.handlePermissionRequest(executionId, eventBus, toolName, toolInput, opts.signal);
+            resetTimeout(); // Reset again after response so next phase gets full window
+            return result;
           }
         }
       });
