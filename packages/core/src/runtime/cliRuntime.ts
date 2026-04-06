@@ -379,10 +379,15 @@ export class CliRuntime implements Runtime {
       // Activity-based timeout: resets on each stdout/stderr chunk so
       // long-running but active processes don't get killed.
       let timeout: NodeJS.Timeout;
+      // Cleanup helper — safe to call multiple times.
+      let permissionUnsub: (() => void) | undefined;
+      const cleanupPermissionSub = () => { permissionUnsub?.(); permissionUnsub = undefined; };
+
       const resetTimeout = () => {
         clearTimeout(timeout);
         timeout = setTimeout(() => {
           child.kill("SIGKILL");
+          cleanupPermissionSub();
           if (mcpFiles) this.cleanupMcpFiles(mcpFiles.mcpDir, mcpFiles.mcpConfigPath, mcpFiles.stateFilePath);
           this.logger.error("CLI runtime timeout — killing process.", {
             executionId,
@@ -408,7 +413,7 @@ export class CliRuntime implements Runtime {
       // for the user to approve/deny sudo requests via Telegram.  The child
       // process produces no stdout/stderr during that wait, so without this
       // the inactivity timeout would fire and kill a legitimately active run.
-      const unsubPermission = eventBus.on((event) => {
+      permissionUnsub = eventBus.on((event) => {
         if (
           (event.type === "permission-request" || event.type === "permission-response") &&
           event.channelId === message.channelId &&
@@ -452,7 +457,7 @@ export class CliRuntime implements Runtime {
       child.on("error", (error: NodeJS.ErrnoException) => {
         clearTimeout(timeout);
         clearInterval(heartbeat);
-        unsubPermission();
+        cleanupPermissionSub();
         if (mcpFiles) this.cleanupMcpFiles(mcpFiles.mcpDir, mcpFiles.mcpConfigPath, mcpFiles.stateFilePath);
         let reason = error.message;
         if (error.code === "ENOENT") {
@@ -475,7 +480,7 @@ export class CliRuntime implements Runtime {
       child.on("close", (code: number | null) => {
         clearTimeout(timeout);
         clearInterval(heartbeat);
-        unsubPermission();
+        cleanupPermissionSub();
 
         const stderr = stderrChunks.join("").trim();
 

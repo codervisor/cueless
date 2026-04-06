@@ -199,6 +199,46 @@ test("CliRuntime emits error event on timeout", async () => {
   assert.equal(error?.payload?.reason, "Runtime timeout.");
 });
 
+test("CliRuntime resets timeout on permission-request events", async () => {
+  const config: AgentConfig = {
+    name: "perm-agent",
+    command: TEST_CMD,
+    args: ["hang"],
+    timeoutMs: 400
+  };
+  const runtime = new CliRuntime(config, logger);
+  const eventBus = new EventBus();
+  const events = collect(eventBus);
+  const testMsg = msg();
+
+  const execPromise = runtime.execute(testMsg, "exec-perm", eventBus);
+
+  // Emit permission-request events every 250ms to keep the timeout alive.
+  // Without the fix, the process would be killed after 400ms.
+  const interval = setInterval(() => {
+    eventBus.emit({
+      executionId: "sudo-fake",
+      channelId: testMsg.channelId,
+      chatId: testMsg.chatId,
+      type: "permission-request",
+      timestamp: Date.now(),
+      payload: { permissionRequestId: "fake", toolName: "sudo", toolInput: { command: "ls" } }
+    });
+  }, 250);
+
+  // Wait longer than the original timeout — should still be alive
+  await new Promise((r) => setTimeout(r, 700));
+
+  // Now stop sending events so the timeout actually fires
+  clearInterval(interval);
+
+  await assert.rejects(() => execPromise, { message: "Runtime timeout." });
+
+  const error = events.find((e) => e.type === "error");
+  assert.ok(error, "should eventually emit error after events stop");
+  assert.equal(error?.payload?.reason, "Runtime timeout.");
+});
+
 // ---------- command not found (ENOENT) ----------
 
 test("CliRuntime emits descriptive error when command is not found", async () => {
