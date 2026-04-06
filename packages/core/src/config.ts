@@ -47,7 +47,7 @@ export type PermissionMode = "plan" | "auto" | "bypassPermissions";
 
 export interface AgentConfig {
   name: string;
-  runtime?: "cli" | "session-claude" | "session-claude-sdk" | "session-gemini" | "session-copilot";
+  runtime?: "cli" | "session-claude" | "session-gemini" | "session-copilot";
   command: string;
   args?: string[];
   env?: Record<string, string>;
@@ -123,7 +123,6 @@ const parseRuntime = (value?: string): AgentConfig["runtime"] => {
   switch (value) {
     case "cli":
     case "session-claude":
-    case "session-claude-sdk":
     case "session-gemini":
     case "session-copilot":
       return value;
@@ -211,7 +210,7 @@ export const loadConfig = (): Config => {
   const memoryTopicId = process.env.MEMORY_TOPIC_ID?.trim();
 
   // Resolve memory extraction LLM — auto-detect from standard env vars:
-  // 1. ANTHROPIC_API_KEY → Anthropic (already set for session-claude-sdk)
+  // 1. ANTHROPIC_API_KEY → Anthropic
   // 2. OPENAI_BASE_URL + OPENAI_API_KEY → OpenAI-compatible (OpenRouter, etc.)
   const parseMemoryExtraction = (): MemoryExtractionConfig | undefined => {
     const memoryModel = process.env.MEMORY_LLM_MODEL?.trim();

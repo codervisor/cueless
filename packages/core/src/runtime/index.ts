@@ -3,14 +3,12 @@ import { AgentRegistry } from "../hub/agentRegistry";
 import { Logger } from "../logging";
 import { MemoryStore, buildMemoryPrompt } from "../memory";
 import { MemoryExtractor } from "../memory/extractor";
-import { createMemoryMcpServer } from "../memory/mcpServer";
 import { MemorySync } from "../memory/sync";
 import { CliRuntime } from "./cliRuntime";
 import { ClaudeSession } from "./session/claudeSession";
 import { CopilotSession } from "./session/copilotSession";
 import { FileSessionStore } from "./session/fileSessionStore";
 import { GeminiSession } from "./session/geminiSession";
-import { SdkClaudeSession } from "./session/sdkClaudeSession";
 import { InMemorySessionManager } from "./session/inMemorySessionManager";
 import { SessionRuntime } from "./session/sessionRuntime";
 import { Runtime } from "./types";
@@ -25,24 +23,13 @@ export interface CreateRuntimeOptions {
 export const createRuntime = (agent: AgentConfig, logger: Logger, options?: CreateRuntimeOptions): Runtime => {
   const { dataDir, memoryStore, memorySync, memoryExtractor } = options ?? {};
 
-  // Agent-driven memory via MCP is available for both SDK and CLI runtimes
-  const canUseAgentDrivenMemory = (agent.runtime === "session-claude-sdk" || !agent.runtime || agent.runtime === "cli")
+  const canUseAgentDrivenMemory = (!agent.runtime || agent.runtime === "cli")
     && !!(memoryStore && memorySync);
 
   logger.info("Runtime memory config.", { agent: agent.name, runtime: agent.runtime || "cli", canUseAgentDrivenMemory, hasMemoryStore: !!memoryStore, hasMemorySync: !!memorySync });
 
   const getSystemPromptSuffix = memoryStore
     ? () => buildMemoryPrompt(memoryStore.all(), canUseAgentDrivenMemory)
-    : undefined;
-
-  const memoryMcpServers = (agent.runtime === "session-claude-sdk" && canUseAgentDrivenMemory)
-    ? {
-        memory: {
-          type: "sdk" as const,
-          name: "memory",
-          instance: createMemoryMcpServer({ memoryStore, memorySync: memorySync!, logger }),
-        },
-      }
     : undefined;
 
   if (!agent.runtime || agent.runtime === "cli") {
@@ -66,16 +53,6 @@ export const createRuntime = (agent: AgentConfig, logger: Logger, options?: Crea
       switch (agent.runtime) {
         case "session-claude":
           return new ClaudeSession(channelId, chatId, agent);
-        case "session-claude-sdk":
-          return new SdkClaudeSession(channelId, chatId, agent, {
-            model: agent.model,
-            systemPrompt: agent.systemPrompt,
-            allowedTools: agent.allowedTools,
-            maxBudgetUsd: agent.maxBudgetUsd,
-            cwd: agent.workingDir,
-            getSystemPromptSuffix,
-            mcpServers: memoryMcpServers,
-          }, logger);
         case "session-gemini":
           return new GeminiSession(channelId, chatId, agent);
         case "session-copilot":
@@ -86,14 +63,11 @@ export const createRuntime = (agent: AgentConfig, logger: Logger, options?: Crea
     }
   });
 
-  // When agent-driven memory is active (MCP server), skip post-hoc extraction
-  const usePostHocExtraction = !memoryMcpServers;
-
   return new SessionRuntime(agent, sessionManager, logger, {
     fileStore,
     memoryStore,
     memorySync,
-    memoryExtractor: usePostHocExtraction ? memoryExtractor : undefined,
+    memoryExtractor,
   });
 };
 

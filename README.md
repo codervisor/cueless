@@ -67,7 +67,7 @@ Set environment variables in `.env` or your deployment platform (Railway, Docker
 
 ¹ Defaults to `/data` automatically whenever the `/data` directory exists (commonly in Docker/Railway/containerized environments).
 
-Supported runtimes: `cli`, `session-claude`, `session-claude-sdk`, `session-gemini`, `session-copilot`.
+Supported runtimes: `cli`, `session-claude`, `session-gemini`, `session-copilot`.
 
 ### Permissions
 
@@ -78,8 +78,6 @@ The `PERMISSION_MODE` variable controls how the agent handles tool approval:
 | `plan`              | Agent can read files and search, but asks for approval before writes/commands |
 | `auto`              | Agent auto-approves safe tools; still asks for destructive ones |
 | `bypassPermissions` | Agent runs all tools without asking (requires non-root user in Docker) |
-
-For the **SDK runtime** (`session-claude-sdk`), permission requests are forwarded to Telegram as inline keyboard buttons — tap "Allow" or "Deny" to approve each tool call.
 
 For the **CLI runtime**, permission mode maps directly to `claude --permission-mode <mode>`.
 
