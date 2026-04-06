@@ -1,14 +1,13 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { Logger } from "../logging";
-import { MemoryStore, MemoryTag } from "./store";
-import { MemorySync } from "./sync";
+import { MemoryTag } from "./store";
+import { MemoryProvider } from "./provider";
 
 const VALID_TAGS: MemoryTag[] = ["project", "personal", "preference", "decision", "context"];
 
 export interface MemoryMcpServerOptions {
-  memoryStore: MemoryStore;
-  memorySync: MemorySync;
+  memoryProvider: MemoryProvider;
   logger?: Logger;
 }
 
@@ -17,32 +16,12 @@ export interface MemoryMcpServerOptions {
  * The agent decides on its own when to save, update, or delete memories.
  */
 export const createMemoryMcpServer = (options: MemoryMcpServerOptions): McpServer => {
-  const { memoryStore, memorySync, logger } = options;
+  const { memoryProvider, logger } = options;
 
   const server = new McpServer({
     name: "memory",
     version: "1.0.0",
   });
-
-  const syncToTelegram = async (): Promise<void> => {
-    try {
-      await memorySync.save(memoryStore.snapshot());
-    } catch (err) {
-      logger?.warn("Failed to sync memory to Telegram.", {
-        reason: err instanceof Error ? err.message : "unknown",
-      });
-    }
-  };
-
-  const sendChangelog = async (text: string): Promise<void> => {
-    try {
-      await memorySync.sendChangelog(text);
-    } catch (err) {
-      logger?.warn("Failed to send memory changelog.", {
-        reason: err instanceof Error ? err.message : "unknown",
-      });
-    }
-  };
 
   server.tool(
     "save_memory",
@@ -54,10 +33,9 @@ export const createMemoryMcpServer = (options: MemoryMcpServerOptions): McpServe
         .describe("The fact to remember. Keep it concise — under 120 characters."),
     },
     async ({ tag, text }) => {
-      const fact = memoryStore.add(tag, text);
-      await syncToTelegram();
+      const fact = await memoryProvider.add(tag, text);
       const changelog = `<b>🧠 Memory updated</b>\n\n➕ <code>${fact.id}</code> [${fact.tag}] ${fact.text}`;
-      await sendChangelog(changelog);
+      await memoryProvider.sendChangelog(changelog);
       logger?.info("Memory saved via agent tool.", { id: fact.id, tag, text });
       return { content: [{ type: "text", text: `Saved memory ${fact.id}: [${tag}] ${text}` }] };
     },
@@ -71,15 +49,14 @@ export const createMemoryMcpServer = (options: MemoryMcpServerOptions): McpServe
       text: z.string().max(120).describe("The updated fact text."),
     },
     async ({ id, text }) => {
-      const existing = memoryStore.get(id);
+      const existing = memoryProvider.get(id);
       if (!existing) {
         return { content: [{ type: "text", text: `Memory ${id} not found.` }] };
       }
       const oldText = existing.text;
-      memoryStore.update(id, text);
-      await syncToTelegram();
+      await memoryProvider.update(id, text);
       const changelog = `<b>🧠 Memory updated</b>\n\n✏️ <code>${id}</code> → ${text}`;
-      await sendChangelog(changelog);
+      await memoryProvider.sendChangelog(changelog);
       logger?.info("Memory updated via agent tool.", { id, oldText, newText: text });
       return { content: [{ type: "text", text: `Updated memory ${id}: ${text}` }] };
     },
@@ -92,14 +69,13 @@ export const createMemoryMcpServer = (options: MemoryMcpServerOptions): McpServe
       id: z.string().describe("The memory ID to delete (e.g. 'f001')."),
     },
     async ({ id }) => {
-      const existing = memoryStore.get(id);
+      const existing = memoryProvider.get(id);
       if (!existing) {
         return { content: [{ type: "text", text: `Memory ${id} not found.` }] };
       }
-      memoryStore.remove(id);
-      await syncToTelegram();
+      await memoryProvider.remove(id);
       const changelog = `<b>🧠 Memory updated</b>\n\n🗑️ <code>${id}</code> ${existing.text}`;
-      await sendChangelog(changelog);
+      await memoryProvider.sendChangelog(changelog);
       logger?.info("Memory deleted via agent tool.", { id, text: existing.text });
       return { content: [{ type: "text", text: `Deleted memory ${id}: ${existing.text}` }] };
     },
@@ -110,7 +86,7 @@ export const createMemoryMcpServer = (options: MemoryMcpServerOptions): McpServe
     "List all stored memories. Use this to review what you currently know before saving or updating.",
     {},
     async () => {
-      const facts = memoryStore.all();
+      const facts = memoryProvider.all();
       if (facts.length === 0) {
         return { content: [{ type: "text", text: "No memories stored yet." }] };
       }
@@ -126,7 +102,7 @@ export const createMemoryMcpServer = (options: MemoryMcpServerOptions): McpServe
       query: z.string().describe("Search term to match against memory text and tags."),
     },
     async ({ query }) => {
-      const results = memoryStore.search(query);
+      const results = memoryProvider.search(query);
       if (results.length === 0) {
         return { content: [{ type: "text", text: `No memories matching "${query}".` }] };
       }
@@ -142,7 +118,7 @@ export const createMemoryMcpServer = (options: MemoryMcpServerOptions): McpServe
       id: z.string().describe("The memory ID (e.g. 'f001')."),
     },
     async ({ id }) => {
-      const fact = memoryStore.get(id);
+      const fact = memoryProvider.get(id);
       if (!fact) {
         return { content: [{ type: "text", text: `Memory ${id} not found.` }] };
       }

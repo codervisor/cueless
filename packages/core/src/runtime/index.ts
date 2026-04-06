@@ -1,9 +1,9 @@
 import { AgentConfig, Config } from "../config";
 import { AgentRegistry } from "../hub/agentRegistry";
 import { Logger } from "../logging";
-import { MemoryStore, buildMemoryPrompt } from "../memory";
-import { MemoryExtractor } from "../memory/extractor";
-import { MemorySync } from "../memory/sync";
+import { buildMemoryPrompt } from "../memory";
+import { MemoryProvider } from "../memory/provider";
+import { TelegramMemoryProvider } from "../memory/telegramProvider";
 import { CliRuntime } from "./cliRuntime";
 import { ClaudeSession } from "./session/claudeSession";
 import { CopilotSession } from "./session/copilotSession";
@@ -15,30 +15,28 @@ import { Runtime } from "./types";
 
 export interface CreateRuntimeOptions {
   dataDir?: string;
-  memoryStore?: MemoryStore;
-  memorySync?: MemorySync;
-  memoryExtractor?: MemoryExtractor;
+  memoryProvider?: MemoryProvider;
 }
 
 export const createRuntime = (agent: AgentConfig, logger: Logger, options?: CreateRuntimeOptions): Runtime => {
-  const { dataDir, memoryStore, memorySync, memoryExtractor } = options ?? {};
+  const { dataDir, memoryProvider } = options ?? {};
 
-  const canUseAgentDrivenMemory = (!agent.runtime || agent.runtime === "cli")
-    && !!(memoryStore && memorySync);
+  // Agent-driven memory via MCP stdio only works with TelegramMemoryProvider (file-based state)
+  const canUseAgentDrivenMemory = !!memoryProvider
+    && (!agent.runtime || agent.runtime === "cli")
+    && memoryProvider instanceof TelegramMemoryProvider;
 
-  logger.info("Runtime memory config.", { agent: agent.name, runtime: agent.runtime || "cli", canUseAgentDrivenMemory, hasMemoryStore: !!memoryStore, hasMemorySync: !!memorySync });
+  logger.info("Runtime memory config.", { agent: agent.name, runtime: agent.runtime || "cli", canUseAgentDrivenMemory, hasMemoryProvider: !!memoryProvider });
 
-  const getSystemPromptSuffix = memoryStore
-    ? () => buildMemoryPrompt(memoryStore.all(), canUseAgentDrivenMemory)
+  const getSystemPromptSuffix = memoryProvider
+    ? () => buildMemoryPrompt(memoryProvider.all(), canUseAgentDrivenMemory)
     : undefined;
 
   if (!agent.runtime || agent.runtime === "cli") {
     return new CliRuntime(agent, logger, {
       dataDir,
       getSystemPromptSuffix,
-      memoryStore,
-      memorySync,
-      memoryExtractor,
+      memoryProvider,
       useAgentDrivenMemory: canUseAgentDrivenMemory,
     });
   }
@@ -65,17 +63,15 @@ export const createRuntime = (agent: AgentConfig, logger: Logger, options?: Crea
 
   return new SessionRuntime(agent, sessionManager, logger, {
     fileStore,
-    memoryStore,
-    memorySync,
-    memoryExtractor,
+    memoryProvider,
   });
 };
 
-export const createAgentRegistry = (config: Config, logger: Logger, memoryStore?: MemoryStore, memorySync?: MemorySync, memoryExtractor?: MemoryExtractor): AgentRegistry => {
+export const createAgentRegistry = (config: Config, logger: Logger, memoryProvider?: MemoryProvider): AgentRegistry => {
   const registry = new AgentRegistry(config.defaultAgent);
 
   for (const agent of config.agents) {
-    registry.register(agent.name, createRuntime(agent, logger, { dataDir: config.dataDir, memoryStore, memorySync, memoryExtractor }));
+    registry.register(agent.name, createRuntime(agent, logger, { dataDir: config.dataDir, memoryProvider }));
   }
 
   return registry;

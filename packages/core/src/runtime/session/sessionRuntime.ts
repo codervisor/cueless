@@ -2,43 +2,35 @@ import { AgentConfig } from "../../config";
 import { EventBus } from "../../events/eventBus";
 import { IMMessage } from "../../gateway/types";
 import { Logger } from "../../logging";
-import { MemoryStore } from "../../memory";
-import { MemoryExtractor } from "../../memory/extractor";
-import { MemorySync } from "../../memory/sync";
+import { MemoryProvider } from "../../memory/provider";
 import { Runtime } from "../types";
 import { FileSessionStore } from "./fileSessionStore";
 import { SessionManager } from "./types";
 
 export interface SessionRuntimeOptions {
   fileStore?: FileSessionStore;
-  memoryStore?: MemoryStore;
-  memorySync?: MemorySync;
-  memoryExtractor?: MemoryExtractor;
+  memoryProvider?: MemoryProvider;
 }
 
 export class SessionRuntime implements Runtime {
   private readonly fileStore?: FileSessionStore;
-  private readonly memoryStore?: MemoryStore;
-  private readonly memorySync?: MemorySync;
-  private readonly memoryExtractor?: MemoryExtractor;
+  private readonly memoryProvider?: MemoryProvider;
 
   constructor(
     private readonly config: AgentConfig,
     private readonly sessionManager: SessionManager,
     private readonly logger: Logger,
     fileStoreOrOptions?: FileSessionStore | SessionRuntimeOptions,
-    memoryStore?: MemoryStore
+    memoryProvider?: MemoryProvider
   ) {
-    // Support both old signature (fileStore, memoryStore) and new options object
+    // Support both old signature (fileStore, memoryProvider) and new options object
     if (fileStoreOrOptions && "get" in fileStoreOrOptions) {
       this.fileStore = fileStoreOrOptions;
-      this.memoryStore = memoryStore;
+      this.memoryProvider = memoryProvider;
     } else if (fileStoreOrOptions) {
       const opts = fileStoreOrOptions as SessionRuntimeOptions;
       this.fileStore = opts.fileStore;
-      this.memoryStore = opts.memoryStore;
-      this.memorySync = opts.memorySync;
-      this.memoryExtractor = opts.memoryExtractor;
+      this.memoryProvider = opts.memoryProvider;
     }
   }
 
@@ -86,7 +78,7 @@ export class SessionRuntime implements Runtime {
     });
 
     // Extract memories async — don't block the next user message
-    if (response && this.memoryExtractor && this.memoryStore && this.memorySync) {
+    if (response && this.memoryProvider) {
       void this.extractAndSyncMemory(message.text, response).catch((err) => {
         this.logger.warn("Memory extraction failed.", {
           reason: err instanceof Error ? err.message : "unknown",
@@ -104,45 +96,24 @@ export class SessionRuntime implements Runtime {
   }
 
   private async extractAndSyncMemory(userText: string, response: string): Promise<void> {
-    const conversation = `User: ${userText}\n\nAssistant: ${response}`;
-    const changes = await this.memoryExtractor!.extract(conversation, this.memoryStore!.all());
+    const changelog = await this.memoryProvider!.ingest(userText, response);
 
-    const hasChanges = changes.add.length > 0 || changes.update.length > 0 || changes.remove.length > 0;
-    if (!hasChanges) return;
+    const parts: string[] = [];
 
-    const changelogParts: string[] = [];
-
-    for (const item of changes.add) {
-      const fact = this.memoryStore!.add(item.tag, item.text);
-      changelogParts.push(`➕ <code>${fact.id}</code> [${fact.tag}] ${fact.text}`);
+    for (const fact of changelog.added) {
+      parts.push(`➕ <code>${fact.id}</code> [${fact.tag}] ${fact.text}`);
+    }
+    for (const item of changelog.updated) {
+      parts.push(`✏️ <code>${item.id}</code> → ${item.text}`);
+    }
+    for (const item of changelog.removed) {
+      parts.push(`🗑️ <code>${item.id}</code> ${item.text}`);
     }
 
-    for (const item of changes.update) {
-      if (this.memoryStore!.update(item.id, item.text)) {
-        changelogParts.push(`✏️ <code>${item.id}</code> → ${item.text}`);
-      }
-    }
-
-    for (const id of changes.remove) {
-      const fact = this.memoryStore!.get(id);
-      if (fact && this.memoryStore!.remove(id)) {
-        changelogParts.push(`🗑️ <code>${id}</code> ${fact.text}`);
-      }
-    }
-
-    // Sync to Telegram
-    await this.memorySync!.save(this.memoryStore!.snapshot());
-
-    if (changelogParts.length > 0) {
-      await this.memorySync!.sendChangelog(
-        `<b>🧠 Memory updated</b>\n\n${changelogParts.join("\n")}`
+    if (parts.length > 0) {
+      await this.memoryProvider!.sendChangelog(
+        `<b>🧠 Memory updated</b>\n\n${parts.join("\n")}`
       );
     }
-
-    this.logger.info("Memory updated.", {
-      added: changes.add.length,
-      updated: changes.update.length,
-      removed: changes.remove.length,
-    });
   }
 }

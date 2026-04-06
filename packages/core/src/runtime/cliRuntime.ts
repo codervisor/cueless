@@ -7,10 +7,9 @@ import { AgentConfig } from "../config";
 import { EventBus } from "../events/eventBus";
 import { IMMessage } from "../gateway/types";
 import { Logger } from "../logging";
-import { MemoryStore } from "../memory";
 import type { MemorySnapshot } from "../memory";
-import { MemoryExtractor } from "../memory/extractor";
-import { MemorySync } from "../memory/sync";
+import { MemoryProvider } from "../memory/provider";
+import { TelegramMemoryProvider } from "../memory/telegramProvider";
 import { Runtime } from "./types";
 import { FileSessionStore } from "./session/fileSessionStore";
 
@@ -18,9 +17,7 @@ export interface CliRuntimeOptions {
   dataDir?: string;
   /** Returns an additional system prompt section at call time (e.g. memory facts). */
   getSystemPromptSuffix?: () => string;
-  memoryStore?: MemoryStore;
-  memorySync?: MemorySync;
-  memoryExtractor?: MemoryExtractor;
+  memoryProvider?: MemoryProvider;
   /** When true, attach the memory MCP stdio server to the CLI via --mcp-config. */
   useAgentDrivenMemory?: boolean;
 }
@@ -32,9 +29,7 @@ export class CliRuntime implements Runtime {
   private readonly executionQueues = new Map<string, Promise<void>>();
   private readonly fileStore?: FileSessionStore;
   private readonly getSystemPromptSuffix?: () => string;
-  private readonly memoryStore?: MemoryStore;
-  private readonly memorySync?: MemorySync;
-  private readonly memoryExtractor?: MemoryExtractor;
+  private readonly memoryProvider?: MemoryProvider;
   private readonly useAgentDrivenMemory: boolean;
 
   /** Resolve the path to the compiled memoryMcpStdio.js once. */
@@ -48,9 +43,7 @@ export class CliRuntime implements Runtime {
       this.fileStore = new FileSessionStore(options.dataDir, "cli-sessions.json", logger);
     }
     this.getSystemPromptSuffix = options?.getSystemPromptSuffix;
-    this.memoryStore = options?.memoryStore;
-    this.memorySync = options?.memorySync;
-    this.memoryExtractor = options?.memoryExtractor;
+    this.memoryProvider = options?.memoryProvider;
     this.useAgentDrivenMemory = options?.useAgentDrivenMemory ?? false;
 
     // Warn about config fields that are silently ignored by the CLI runtime.
@@ -148,11 +141,13 @@ export class CliRuntime implements Runtime {
    */
   private prepareMcpConfig(executionId: string): { mcpDir: string; mcpConfigPath: string; stateFilePath: string; baseline: MemorySnapshot } | null {
     if (!this.useAgentDrivenMemory) {
-      this.logger.debug("Agent-driven memory disabled, skipping MCP config.", { executionId, hasMemoryStore: !!this.memoryStore });
+      this.logger.debug("Agent-driven memory disabled, skipping MCP config.", { executionId, hasMemoryProvider: !!this.memoryProvider });
       return null;
     }
-    if (!this.memoryStore) {
-      this.logger.warn("Agent-driven memory enabled but memoryStore is missing, skipping MCP config.", { executionId });
+    // CLI MCP stdio requires a TelegramMemoryProvider with direct MemoryStore access
+    const telegramProvider = this.memoryProvider instanceof TelegramMemoryProvider ? this.memoryProvider : undefined;
+    if (!telegramProvider) {
+      this.logger.debug("Agent-driven memory via CLI MCP is only supported with telegram provider, skipping.", { executionId });
       return null;
     }
 
@@ -170,7 +165,7 @@ export class CliRuntime implements Runtime {
     const mcpConfigPath = join(mcpDir, "mcp-config.json");
 
     // Capture baseline snapshot before spawning — used for diffing later
-    const baseline = this.memoryStore.snapshot();
+    const baseline = telegramProvider.store.snapshot();
 
     // Write files with restrictive permissions (0o600) via O_EXCL to prevent symlink attacks
     const writeSecure = (path: string, data: string): void => {
@@ -209,7 +204,8 @@ export class CliRuntime implements Runtime {
    * when concurrent executions mutate the shared MemoryStore.
    */
   private async syncMemoryFromFile(stateFilePath: string, baseline: MemorySnapshot): Promise<void> {
-    if (!this.memoryStore || !this.memorySync) return;
+    const telegramProvider = this.memoryProvider instanceof TelegramMemoryProvider ? this.memoryProvider : undefined;
+    if (!telegramProvider) return;
 
     try {
       const raw = readFileSync(stateFilePath, "utf-8");
@@ -222,10 +218,12 @@ export class CliRuntime implements Runtime {
 
       const changelogParts: string[] = [];
 
+      const store = telegramProvider.store;
+
       // Detect facts added by the subprocess (in after but not in baseline)
       for (const fact of afterSnapshot.facts) {
         if (!baselineMap.has(fact.id)) {
-          const added = this.memoryStore.add(fact.tag, fact.text);
+          const added = store.add(fact.tag, fact.text);
           changelogParts.push(`➕ <code>${added.id}</code> [${fact.tag}] ${fact.text}`);
         }
       }
@@ -234,7 +232,7 @@ export class CliRuntime implements Runtime {
       for (const [id, baseFact] of baselineMap) {
         const afterFact = afterMap.get(id);
         if (afterFact && afterFact.text !== baseFact.text) {
-          this.memoryStore.update(id, afterFact.text);
+          store.update(id, afterFact.text);
           changelogParts.push(`✏️ <code>${id}</code> → ${afterFact.text}`);
         }
       }
@@ -242,15 +240,14 @@ export class CliRuntime implements Runtime {
       // Detect facts removed by the subprocess (in baseline but not in after)
       for (const [id, baseFact] of baselineMap) {
         if (!afterMap.has(id)) {
-          this.memoryStore.remove(id);
+          store.remove(id);
           changelogParts.push(`🗑️ <code>${id}</code> ${baseFact.text}`);
         }
       }
 
       if (changelogParts.length === 0) return;
 
-      await this.memorySync.save(this.memoryStore.snapshot());
-      await this.memorySync.sendChangelog(
+      await telegramProvider.sendChangelog(
         `<b>🧠 Memory updated</b>\n\n${changelogParts.join("\n")}`,
       );
 
@@ -544,14 +541,11 @@ export class CliRuntime implements Runtime {
         });
 
         // Sync memories from the MCP state file (agent-driven), or fall back to post-hoc extraction
-        if (mcpFiles && this.memoryStore && this.memorySync) {
+        if (mcpFiles) {
           void this.syncMemoryFromFile(mcpFiles.stateFilePath, mcpFiles.baseline).finally(() => {
             this.cleanupMcpFiles(mcpFiles.mcpDir, mcpFiles.mcpConfigPath, mcpFiles.stateFilePath);
           });
-        } else if (mcpFiles) {
-          // Agent-driven memory prepared but sync deps missing — just clean up
-          this.cleanupMcpFiles(mcpFiles.mcpDir, mcpFiles.mcpConfigPath, mcpFiles.stateFilePath);
-        } else if (response && this.memoryExtractor && this.memoryStore && this.memorySync) {
+        } else if (response && this.memoryProvider) {
           void this.extractMemory(message.text, response);
         }
 
@@ -576,45 +570,24 @@ export class CliRuntime implements Runtime {
 
   private async extractMemory(userText: string, response: string): Promise<void> {
     try {
-      const conversation = `User: ${userText}\n\nAssistant: ${response}`;
-      const changes = await this.memoryExtractor!.extract(conversation, this.memoryStore!.all());
+      const changelog = await this.memoryProvider!.ingest(userText, response);
 
-      const hasChanges = changes.add.length > 0 || changes.update.length > 0 || changes.remove.length > 0;
-      if (!hasChanges) return;
-
-      const changelogParts: string[] = [];
-
-      for (const item of changes.add) {
-        const fact = this.memoryStore!.add(item.tag, item.text);
-        changelogParts.push(`➕ <code>${fact.id}</code> [${fact.tag}] ${fact.text}`);
+      const parts: string[] = [];
+      for (const fact of changelog.added) {
+        parts.push(`➕ <code>${fact.id}</code> [${fact.tag}] ${fact.text}`);
+      }
+      for (const item of changelog.updated) {
+        parts.push(`✏️ <code>${item.id}</code> → ${item.text}`);
+      }
+      for (const item of changelog.removed) {
+        parts.push(`🗑️ <code>${item.id}</code> ${item.text}`);
       }
 
-      for (const item of changes.update) {
-        if (this.memoryStore!.update(item.id, item.text)) {
-          changelogParts.push(`✏️ <code>${item.id}</code> → ${item.text}`);
-        }
-      }
-
-      for (const id of changes.remove) {
-        const fact = this.memoryStore!.get(id);
-        if (fact && this.memoryStore!.remove(id)) {
-          changelogParts.push(`🗑️ <code>${id}</code> ${fact.text}`);
-        }
-      }
-
-      await this.memorySync!.save(this.memoryStore!.snapshot());
-
-      if (changelogParts.length > 0) {
-        await this.memorySync!.sendChangelog(
-          `<b>🧠 Memory updated</b>\n\n${changelogParts.join("\n")}`
+      if (parts.length > 0) {
+        await this.memoryProvider!.sendChangelog(
+          `<b>🧠 Memory updated</b>\n\n${parts.join("\n")}`
         );
       }
-
-      this.logger.info("Memory updated.", {
-        added: changes.add.length,
-        updated: changes.update.length,
-        removed: changes.remove.length,
-      });
     } catch (err) {
       this.logger.warn("Memory extraction failed.", {
         reason: err instanceof Error ? err.message : "unknown",

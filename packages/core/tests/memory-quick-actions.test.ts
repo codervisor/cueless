@@ -6,9 +6,28 @@ import { ChannelHub, parseBuiltinCommand } from "../src/hub/hub";
 import { Router } from "../src/hub/router";
 import { Runtime } from "../src/runtime/types";
 import { MemoryStore } from "../src/memory";
+import { MemoryProvider, MemoryChangelog } from "../src/memory/provider";
+import { MemoryFact, MemoryTag } from "../src/memory/store";
 import { MockAdapter } from "./mockAdapter";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Minimal MemoryProvider wrapping a MemoryStore for testing. */
+class TestMemoryProvider implements MemoryProvider {
+  constructor(readonly store: MemoryStore) {}
+  async load(): Promise<void> {}
+  all(): MemoryFact[] { return this.store.all(); }
+  get(id: string): MemoryFact | undefined { return this.store.get(id); }
+  search(query: string): MemoryFact[] { return this.store.search(query); }
+  byTag(tag: MemoryTag): MemoryFact[] { return this.store.byTag(tag); }
+  async add(tag: MemoryTag, text: string): Promise<MemoryFact> { return this.store.add(tag, text); }
+  async update(id: string, text: string): Promise<boolean> { return this.store.update(id, text); }
+  async remove(id: string): Promise<boolean> { return this.store.remove(id); }
+  async clear(): Promise<void> { this.store.clear(); }
+  isEmpty(): boolean { return this.store.isEmpty(); }
+  async ingest(): Promise<MemoryChangelog> { return { added: [], updated: [], removed: [] }; }
+  async sendChangelog(): Promise<void> {}
+}
 
 function createTestHub(adapter: MockAdapter, memoryStore?: MemoryStore) {
   const eventBus = new EventBus();
@@ -21,10 +40,7 @@ function createTestHub(adapter: MockAdapter, memoryStore?: MemoryStore) {
       return { runtime, message };
     },
   };
-  // Pass a mock memorySync that records save calls
-  const memorySync = memoryStore
-    ? { save: async () => {}, load: async () => null, sendChangelog: async () => {} }
-    : undefined;
+  const provider = memoryStore ? new TestMemoryProvider(memoryStore) : undefined;
 
   return new ChannelHub(
     [adapter],
@@ -32,8 +48,7 @@ function createTestHub(adapter: MockAdapter, memoryStore?: MemoryStore) {
     eventBus,
     logger,
     undefined,
-    memoryStore,
-    memorySync as any
+    provider
   );
 }
 
@@ -233,7 +248,7 @@ test("/memory channel shows channel info with markup", async () => {
   const logger = createLogger("error");
   const runtime: Runtime = { async execute(): Promise<void> {} };
   const router: Router = { select(message) { return { runtime, message }; } };
-  const memorySync = { save: async () => {}, load: async () => null, sendChangelog: async () => {} };
+  const provider = new TestMemoryProvider(store);
 
   const hub = new ChannelHub(
     [adapter],
@@ -241,8 +256,7 @@ test("/memory channel shows channel info with markup", async () => {
     eventBus,
     logger,
     undefined,
-    store,
-    memorySync as any,
+    provider,
     { resolvedChatId: "-1001234567890", rawChatId: "@my_agent_memory", cacheSource: "cached" }
   );
   await hub.start();
@@ -305,7 +319,7 @@ test("mem:cache:flush deletes cache entry and edits message", async () => {
   const logger = createLogger("error");
   const runtime: Runtime = { async execute(): Promise<void> {} };
   const router: Router = { select(message) { return { runtime, message }; } };
-  const memorySync = { save: async () => {}, load: async () => null, sendChangelog: async () => {} };
+  const provider = new TestMemoryProvider(store);
 
   let deletedKey: string | undefined;
   const stubCacheStore = {
@@ -320,8 +334,7 @@ test("mem:cache:flush deletes cache entry and edits message", async () => {
     eventBus,
     logger,
     undefined,
-    store,
-    memorySync as any,
+    provider,
     { resolvedChatId: "-1001234567890", rawChatId: "@my_agent_memory", cacheSource: "cached", cacheStore: stubCacheStore as any }
   );
   await hub.start();
