@@ -83,10 +83,12 @@ export interface Mem0ProviderConfig {
 }
 
 export interface MemoryRefinementConfig {
-  /** Interval between automatic refinements in milliseconds. Default: 86400000 (24h). */
+  /** Interval between automatic refinements in milliseconds. Default: 3600000 (1h). */
   intervalMs: number;
   /** Trigger refinement when fact count reaches this threshold. 0 = disabled. Default: 50. */
   factThreshold: number;
+  /** Override the model used for refinement (passed to claude --model). */
+  model?: string;
 }
 
 export interface MemoryConfig {
@@ -269,21 +271,20 @@ export const loadConfig = (): Config => {
   };
 
   const parseRefinementConfig = (): MemoryRefinementConfig | undefined => {
-    // Refinement requires an extraction LLM — reuse the same config
-    if (!parseMemoryExtraction()) return undefined;
-
     // Explicitly disabled via MEMORY_REFINEMENT_ENABLED=false
     if (process.env.MEMORY_REFINEMENT_ENABLED?.trim().toLowerCase() === "false") return undefined;
 
     const rawInterval = process.env.MEMORY_REFINEMENT_INTERVAL_MS?.trim();
     const rawThreshold = process.env.MEMORY_REFINEMENT_THRESHOLD?.trim();
+    const model = process.env.MEMORY_REFINEMENT_MODEL?.trim() || undefined;
 
-    const intervalMs = rawInterval ? Number(rawInterval) : 24 * 60 * 60 * 1000;
+    const intervalMs = rawInterval ? Number(rawInterval) : 60 * 60 * 1000;
     const factThreshold = rawThreshold ? Number(rawThreshold) : 50;
 
     return {
-      intervalMs: Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 24 * 60 * 60 * 1000,
+      intervalMs: Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 60 * 60 * 1000,
       factThreshold: Number.isFinite(factThreshold) && factThreshold >= 0 ? factThreshold : 50,
+      model,
     };
   };
 
