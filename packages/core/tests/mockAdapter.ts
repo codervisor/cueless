@@ -11,6 +11,8 @@ export class MockAdapter implements IMAdapter {
   public sentDocuments: Array<{ chatId: string; file: Buffer | string; options?: { caption?: string; fileName?: string } }> = [];
   public createdTopics: Array<{ chatId: string; name: string; topicId: number }> = [];
   public closedTopics: Array<{ chatId: string; topicId: number }> = [];
+  /** Ordered log of all operations for verifying call sequence. */
+  public operationLog: Array<{ op: string; text?: string; messageId?: number }> = [];
   private nextMessageId = 1;
   private nextTopicId = 100;
   public forumTopicsEnabled = false;
@@ -25,16 +27,19 @@ export class MockAdapter implements IMAdapter {
 
   async sendMessage(chatId: string, text: string): Promise<void> {
     this.sentMessages.push({ chatId, text });
+    this.operationLog.push({ op: "sendMessage", text });
   }
 
   async sendMessageWithMarkup(chatId: string, text: string, markup: unknown, options?: { threadId?: number }): Promise<number> {
     const messageId = this.nextMessageId++;
     this.sentMarkupMessages.push({ chatId, text, markup, messageId, options });
+    this.operationLog.push({ op: "sendMessageWithMarkup", text, messageId });
     return messageId;
   }
 
   async editMessage(chatId: string, messageId: number, text: string): Promise<void> {
     this.editedMessages.push({ chatId, messageId, text });
+    this.operationLog.push({ op: "editMessage", text, messageId });
   }
 
   async editMessageWithMarkup(chatId: string, messageId: number, text: string, markup: unknown): Promise<void> {
@@ -65,6 +70,7 @@ export class MockAdapter implements IMAdapter {
   async sendMessageDraft(chatId: string, draftId: number, text: string, options?: { threadId?: number }): Promise<number> {
     const messageId = this.nextMessageId++;
     this.draftMessages.push({ chatId, draftId, text, messageId, options });
+    this.operationLog.push({ op: "sendMessageDraft", text, messageId });
     return messageId;
   }
 

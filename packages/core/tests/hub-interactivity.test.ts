@@ -400,3 +400,51 @@ test("ChannelHub sends execution summary to forum topic thread", async () => {
 
   await hub.stop();
 });
+
+test("ChannelHub sends execution summary before flushing streamed draft to prevent ordering issues", async () => {
+  const eventBus = new EventBus();
+  const logger = createLogger("error");
+  const adapter = new MockAdapter("telegram");
+
+  const runtime: Runtime = {
+    async execute(message, executionId, bus): Promise<void> {
+      const base = { executionId, channelId: message.channelId, chatId: message.chatId };
+
+      bus.emit({ ...base, type: "start", timestamp: 1000, payload: { agentName: "claude" } });
+
+      // Simulate tool uses so the summary threshold is met
+      bus.emit({ ...base, type: "tool-use", timestamp: 1500, payload: { toolName: "Read", toolInput: { file_path: "/a.ts" } } });
+      bus.emit({ ...base, type: "tool-use", timestamp: 2000, payload: { toolName: "Edit", toolInput: { file_path: "/a.ts" } } });
+
+      // Stream text to create a visible draft
+      bus.emit({ ...base, type: "stream-text", timestamp: 3000, payload: { text: "Here is the response content" } });
+
+      // Complete after enough time for summary to appear
+      bus.emit({ ...base, type: "complete", timestamp: 8000, payload: { response: "Here is the response content" } });
+    }
+  };
+
+  const router: Router = { select(message) { return { runtime, message }; } };
+  const hub = new ChannelHub([adapter], router, eventBus, logger);
+  await hub.start();
+
+  await adapter.simulateIncoming({ channelId: "telegram", chatId: "chat-1", text: "do work" });
+  await sleep(50);
+
+  // Find the summary send and the draft finalization edit in the operation log
+  const summaryIdx = adapter.operationLog.findIndex(
+    (op) => (op.op === "sendMessage" || op.op === "sendMessageWithMarkup") && op.text?.includes("tools used")
+  );
+  const flushEditIdx = adapter.operationLog.findIndex(
+    (op) => op.op === "editMessage" && op.text?.includes("Here is the response")
+  );
+
+  assert.ok(summaryIdx >= 0, "should send execution summary");
+  assert.ok(flushEditIdx >= 0, "should flush draft via editMessage");
+  assert.ok(
+    summaryIdx < flushEditIdx,
+    `summary (index ${summaryIdx}) should be sent before draft flush edit (index ${flushEditIdx}) to prevent user messages from appearing between response and summary`
+  );
+
+  await hub.stop();
+});
