@@ -749,32 +749,37 @@ export class CliRuntime implements Runtime {
             });
           }
         } else if (delta?.type === "input_json_delta") {
-          // Accumulate tool input JSON fragments
+          // Accumulate tool input JSON fragments for the matching tool block
           const pending = this.pendingToolBlocks.get(executionId);
-          if (pending) {
+          const blockIndex = typeof event.index === "number" ? event.index : 0;
+          if (pending && pending.index === blockIndex) {
             pending.inputJson += (delta.partial_json as string) || "";
           }
         }
       } else if (eventType === "content_block_stop") {
         // Tool block complete — emit enriched tool-use event with parsed input
         const pending = this.pendingToolBlocks.get(executionId);
-        if (pending && pending.inputJson) {
-          try {
-            const toolInput = JSON.parse(pending.inputJson) as Record<string, unknown>;
-            eventBus.emit({
-              executionId,
-              channelId: message.channelId,
-              chatId: message.chatId,
-              type: "tool-use",
-              timestamp: Date.now(),
-              payload: {
-                toolName: pending.name,
-                toolInput,
-              }
-            });
-          } catch {
-            // Malformed JSON — the initial tool-use event already showed the name
+        const blockIndex = typeof event.index === "number" ? event.index : 0;
+        if (pending && pending.index === blockIndex) {
+          if (pending.inputJson) {
+            try {
+              const toolInput = JSON.parse(pending.inputJson) as Record<string, unknown>;
+              eventBus.emit({
+                executionId,
+                channelId: message.channelId,
+                chatId: message.chatId,
+                type: "tool-use",
+                timestamp: Date.now(),
+                payload: {
+                  toolName: pending.name,
+                  toolInput,
+                }
+              });
+            } catch {
+              // Malformed JSON — the initial tool-use event already showed the name
+            }
           }
+          // Always clean up to prevent memory leaks
           this.pendingToolBlocks.delete(executionId);
         }
       }

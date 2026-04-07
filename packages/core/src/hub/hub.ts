@@ -1075,11 +1075,11 @@ export class ChannelHub {
         await adapter.editMessage(event.chatId, draft.messageId, markdownToTelegramHtml(finalized)).catch(() => {});
       }
 
-      // Reset draft for the overflow — next update will create a new message/draft
+      // Reset per-message draft state for the overflow so the next update creates a new
+      // message/draft, but preserve draftFailed to avoid retrying unsupported drafts.
       draft.text = overflow;
       draft.messageId = undefined;
       draft.draftId = undefined;
-      draft.draftFailed = false;
       return;
     }
 
@@ -1136,23 +1136,32 @@ export class ChannelHub {
 
     const chunks = splitMessage(draft.text);
 
+    // Helper to send a chunk with thread awareness (for forum topics)
+    const sendChunk = async (text: string) => {
+      if (topicId && adapter.sendMessageWithMarkup) {
+        await adapter.sendMessageWithMarkup(chatId, text, undefined, { threadId: topicId });
+      } else {
+        await adapter.sendMessage(chatId, text);
+      }
+    };
+
     // Final flush via sendMessageDraft if we were using drafts
     if (draft.draftId && !draft.draftFailed && adapter.sendMessageDraft) {
       await adapter.sendMessageDraft(chatId, draft.draftId, markdownToTelegramHtml(chunks[0]), { threadId: topicId }).catch(() => {});
       for (let i = 1; i < chunks.length; i++) {
-        await adapter.sendMessage(chatId, markdownToTelegramHtml(chunks[i]));
+        await sendChunk(markdownToTelegramHtml(chunks[i]));
       }
     } else if (draft.messageId && adapter.editMessage) {
       // Edit existing message with first chunk
       await adapter.editMessage(chatId, draft.messageId, markdownToTelegramHtml(chunks[0])).catch(() => {});
       // Send remaining chunks as new messages
       for (let i = 1; i < chunks.length; i++) {
-        await adapter.sendMessage(chatId, markdownToTelegramHtml(chunks[i]));
+        await sendChunk(markdownToTelegramHtml(chunks[i]));
       }
     } else if (chunks.length > 0) {
       // No existing message — send all chunks
       for (const chunk of chunks) {
-        await adapter.sendMessage(chatId, markdownToTelegramHtml(chunk));
+        await sendChunk(markdownToTelegramHtml(chunk));
       }
     }
 
