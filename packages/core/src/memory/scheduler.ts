@@ -3,14 +3,14 @@ import { MemoryProvider } from "./provider";
 import { MemoryRefiner, RefinementResult } from "./refiner";
 
 export interface RefinementSchedulerConfig {
-  /** Interval between automatic refinements in milliseconds. Default: 3600000 (1h). */
+  /** Interval between automatic refinements in milliseconds. Default: 86400000 (24h). */
   intervalMs: number;
   /** Trigger refinement when fact count reaches this threshold. 0 = disabled. Default: 50. */
   factThreshold: number;
 }
 
 const DEFAULT_CONFIG: RefinementSchedulerConfig = {
-  intervalMs: 60 * 60 * 1000, // 1 hour
+  intervalMs: 24 * 60 * 60 * 1000, // 24 hours
   factThreshold: 50,
 };
 
@@ -26,7 +26,7 @@ export interface RefinementChangelog {
  * Schedules periodic memory refinement.
  *
  * Triggers:
- * 1. Time-based: runs every `intervalMs` (default 1h)
+ * 1. Time-based: runs every `intervalMs` (default 24h)
  * 2. Threshold-based: runs when fact count exceeds `factThreshold` (checked after each ingest)
  * 3. On-demand: via `runNow()`
  */

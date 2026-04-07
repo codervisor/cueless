@@ -83,7 +83,7 @@ export interface Mem0ProviderConfig {
 }
 
 export interface MemoryRefinementConfig {
-  /** Interval between automatic refinements in milliseconds. Default: 3600000 (1h). */
+  /** Interval between automatic refinements in milliseconds. Default: 86400000 (24h). */
   intervalMs: number;
   /** Trigger refinement when fact count reaches this threshold. 0 = disabled. Default: 50. */
   factThreshold: number;
@@ -278,11 +278,11 @@ export const loadConfig = (): Config => {
     const rawThreshold = process.env.MEMORY_REFINEMENT_THRESHOLD?.trim();
     const model = process.env.MEMORY_REFINEMENT_MODEL?.trim() || undefined;
 
-    const intervalMs = rawInterval ? Number(rawInterval) : 60 * 60 * 1000;
+    const intervalMs = rawInterval ? Number(rawInterval) : 24 * 60 * 60 * 1000;
     const factThreshold = rawThreshold ? Number(rawThreshold) : 50;
 
     return {
-      intervalMs: Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 60 * 60 * 1000,
+      intervalMs: Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 24 * 60 * 60 * 1000,
       factThreshold: Number.isFinite(factThreshold) && factThreshold >= 0 ? factThreshold : 50,
       model,
     };
