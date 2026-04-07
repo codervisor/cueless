@@ -785,14 +785,41 @@ export class ChannelHub {
         });
       }
 
-      // Flush stream draft and check if we already streamed the response
+      // Check if the response is already visible via a streaming draft.
+      // If so, send the summary (and error text if applicable) BEFORE flushing
+      // the draft to guarantee correct message ordering. The flush only converts
+      // the draft into a permanent message via editMessage — it doesn't change
+      // the message's position. Sending the summary first reserves its position
+      // directly below the visible response, preventing user messages from
+      // appearing between the response and the summary.
+      const draftKey = `${event.channelId}:${event.chatId}:${event.executionId}`;
+      const draft = this.streamDrafts.get(draftKey);
+      const hasDraftContent = draft && draft.text.trim().length > 0;
+
+      if (hasDraftContent) {
+        // For errors, send the error text before the summary
+        if (event.type === "error") {
+          const text = formatEvent(event);
+          if (text) {
+            const chunks = splitMessage(text);
+            for (const chunk of chunks) {
+              await adapter.sendMessage(event.chatId, markdownToTelegramHtml(chunk));
+            }
+          }
+        }
+        await this.sendExecutionSummary(adapter, event, topicId);
+        // Now flush the draft — editMessage keeps the draft at its original position
+        await this.flushStreamDraft(adapter, event.channelId, event.chatId, event.executionId, topicId);
+        this.closeForumTopicIfNeeded(adapter, event, topicId);
+        return;
+      }
+
+      // No visible draft — flush any pending draft (may be empty)
       const flushedContent = await this.flushStreamDraft(adapter, event.channelId, event.chatId, event.executionId, topicId);
 
       // Skip sending duplicate response if we already streamed it in-place
       if (flushedContent && event.type === "complete") {
-        // Still send execution summary even for streamed responses
         await this.sendExecutionSummary(adapter, event, topicId);
-        // Close forum topic after all messages are sent
         this.closeForumTopicIfNeeded(adapter, event, topicId);
         return;
       }
