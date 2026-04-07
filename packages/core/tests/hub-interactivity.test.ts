@@ -168,105 +168,117 @@ test("ChannelHub prepends replyToText context to routed message", async () => {
 
 test("ChannelHub sends execution summary with tool count on completion", async () => {
   process.env.SHOW_EXECUTION_SUMMARY = "true";
-  const eventBus = new EventBus();
-  const logger = createLogger("error");
-  const adapter = new MockAdapter("telegram");
+  try {
+    const eventBus = new EventBus();
+    const logger = createLogger("error");
+    const adapter = new MockAdapter("telegram");
 
-  const runtime: Runtime = {
-    async execute(message, executionId, bus): Promise<void> {
-      const base = { executionId, channelId: message.channelId, chatId: message.chatId };
+    const runtime: Runtime = {
+      async execute(message, executionId, bus): Promise<void> {
+        const base = { executionId, channelId: message.channelId, chatId: message.chatId };
 
-      bus.emit({ ...base, type: "start", timestamp: 1000, payload: { agentName: "claude" } });
+        bus.emit({ ...base, type: "start", timestamp: 1000, payload: { agentName: "claude" } });
 
-      // Emit tool-use events
-      bus.emit({ ...base, type: "tool-use", timestamp: 1500, payload: { toolName: "Read", toolInput: { file_path: "/a.ts" } } });
-      bus.emit({ ...base, type: "tool-use", timestamp: 2000, payload: { toolName: "Edit", toolInput: { file_path: "/a.ts" } } });
-      bus.emit({ ...base, type: "tool-use", timestamp: 2500, payload: { toolName: "Bash", toolInput: { command: "npm test" } } });
+        // Emit tool-use events
+        bus.emit({ ...base, type: "tool-use", timestamp: 1500, payload: { toolName: "Read", toolInput: { file_path: "/a.ts" } } });
+        bus.emit({ ...base, type: "tool-use", timestamp: 2000, payload: { toolName: "Edit", toolInput: { file_path: "/a.ts" } } });
+        bus.emit({ ...base, type: "tool-use", timestamp: 2500, payload: { toolName: "Bash", toolInput: { command: "npm test" } } });
 
-      // Complete after 6 seconds (above the 5s threshold)
-      bus.emit({ ...base, type: "complete", timestamp: 7000, payload: { response: "done" } });
-    }
-  };
+        // Complete after 6 seconds (above the 5s threshold)
+        bus.emit({ ...base, type: "complete", timestamp: 7000, payload: { response: "done" } });
+      }
+    };
 
-  const router: Router = { select(message) { return { runtime, message }; } };
-  const hub = new ChannelHub([adapter], router, eventBus, logger);
-  await hub.start();
+    const router: Router = { select(message) { return { runtime, message }; } };
+    const hub = new ChannelHub([adapter], router, eventBus, logger);
+    await hub.start();
 
-  await adapter.simulateIncoming({ channelId: "telegram", chatId: "chat-1", text: "do work" });
-  await sleep(50);
+    await adapter.simulateIncoming({ channelId: "telegram", chatId: "chat-1", text: "do work" });
+    await sleep(50);
 
-  // Should have a summary message with tool count
-  const allMessages = [...adapter.sentMessages, ...adapter.sentMarkupMessages];
-  const summaryMsg = allMessages.find((m) => m.text.includes("tools used"));
-  assert.ok(summaryMsg, "should send execution summary with tool count");
-  assert.ok(summaryMsg!.text.includes("3 tools used"), "should report 3 tools");
-  assert.ok(summaryMsg!.text.includes("✅"), "should use success icon for complete status");
+    // Should have a summary message with tool count
+    const allMessages = [...adapter.sentMessages, ...adapter.sentMarkupMessages];
+    const summaryMsg = allMessages.find((m) => m.text.includes("tools used"));
+    assert.ok(summaryMsg, "should send execution summary with tool count");
+    assert.ok(summaryMsg!.text.includes("3 tools used"), "should report 3 tools");
+    assert.ok(summaryMsg!.text.includes("✅"), "should use success icon for complete status");
 
-  await hub.stop();
-  delete process.env.SHOW_EXECUTION_SUMMARY;
+    await hub.stop();
+  } finally {
+    delete process.env.SHOW_EXECUTION_SUMMARY;
+  }
 });
 
 test("ChannelHub suppresses execution summary for quick runs with no tools", async () => {
-  const eventBus = new EventBus();
-  const logger = createLogger("error");
-  const adapter = new MockAdapter("telegram");
+  // Enable summaries to verify the duration/tool-count threshold logic (not just the env gate)
+  process.env.SHOW_EXECUTION_SUMMARY = "true";
+  try {
+    const eventBus = new EventBus();
+    const logger = createLogger("error");
+    const adapter = new MockAdapter("telegram");
 
-  const runtime: Runtime = {
-    async execute(message, executionId, bus): Promise<void> {
-      const base = { executionId, channelId: message.channelId, chatId: message.chatId };
-      const now = Date.now();
+    const runtime: Runtime = {
+      async execute(message, executionId, bus): Promise<void> {
+        const base = { executionId, channelId: message.channelId, chatId: message.chatId };
+        const now = Date.now();
 
-      bus.emit({ ...base, type: "start", timestamp: now, payload: { agentName: "claude" } });
-      // Complete quickly (under 5s) with no tools
-      bus.emit({ ...base, type: "complete", timestamp: now + 1000, payload: { response: "quick reply" } });
-    }
-  };
+        bus.emit({ ...base, type: "start", timestamp: now, payload: { agentName: "claude" } });
+        // Complete quickly (under 5s) with no tools
+        bus.emit({ ...base, type: "complete", timestamp: now + 1000, payload: { response: "quick reply" } });
+      }
+    };
 
-  const router: Router = { select(message) { return { runtime, message }; } };
-  const hub = new ChannelHub([adapter], router, eventBus, logger);
-  await hub.start();
+    const router: Router = { select(message) { return { runtime, message }; } };
+    const hub = new ChannelHub([adapter], router, eventBus, logger);
+    await hub.start();
 
-  await adapter.simulateIncoming({ channelId: "telegram", chatId: "chat-1", text: "hi" });
-  await sleep(50);
+    await adapter.simulateIncoming({ channelId: "telegram", chatId: "chat-1", text: "hi" });
+    await sleep(50);
 
-  // Should NOT have a summary message for quick no-tool runs
-  const allMessages = [...adapter.sentMessages, ...adapter.sentMarkupMessages];
-  const summaryMsg = allMessages.find((m) => m.text.includes("tools used"));
-  assert.equal(summaryMsg, undefined, "should not send summary for quick runs with no tools");
+    // Should NOT have a summary message for quick no-tool runs
+    const allMessages = [...adapter.sentMessages, ...adapter.sentMarkupMessages];
+    const summaryMsg = allMessages.find((m) => m.text.includes("tools used"));
+    assert.equal(summaryMsg, undefined, "should not send summary for quick runs with no tools even when enabled");
 
-  await hub.stop();
+    await hub.stop();
+  } finally {
+    delete process.env.SHOW_EXECUTION_SUMMARY;
+  }
 });
 
 test("ChannelHub sends error icon in execution summary on failure", async () => {
   process.env.SHOW_EXECUTION_SUMMARY = "true";
-  const eventBus = new EventBus();
-  const logger = createLogger("error");
-  const adapter = new MockAdapter("telegram");
+  try {
+    const eventBus = new EventBus();
+    const logger = createLogger("error");
+    const adapter = new MockAdapter("telegram");
 
-  const runtime: Runtime = {
-    async execute(message, executionId, bus): Promise<void> {
-      const base = { executionId, channelId: message.channelId, chatId: message.chatId };
+    const runtime: Runtime = {
+      async execute(message, executionId, bus): Promise<void> {
+        const base = { executionId, channelId: message.channelId, chatId: message.chatId };
 
-      bus.emit({ ...base, type: "start", timestamp: 1000, payload: { agentName: "claude" } });
-      bus.emit({ ...base, type: "tool-use", timestamp: 1500, payload: { toolName: "Bash", toolInput: { command: "npm test" } } });
-      bus.emit({ ...base, type: "error", timestamp: 8000, payload: { reason: "Runtime timeout." } });
-    }
-  };
+        bus.emit({ ...base, type: "start", timestamp: 1000, payload: { agentName: "claude" } });
+        bus.emit({ ...base, type: "tool-use", timestamp: 1500, payload: { toolName: "Bash", toolInput: { command: "npm test" } } });
+        bus.emit({ ...base, type: "error", timestamp: 8000, payload: { reason: "Runtime timeout." } });
+      }
+    };
 
-  const router: Router = { select(message) { return { runtime, message }; } };
-  const hub = new ChannelHub([adapter], router, eventBus, logger);
-  await hub.start();
+    const router: Router = { select(message) { return { runtime, message }; } };
+    const hub = new ChannelHub([adapter], router, eventBus, logger);
+    await hub.start();
 
-  await adapter.simulateIncoming({ channelId: "telegram", chatId: "chat-1", text: "do work" });
-  await sleep(50);
+    await adapter.simulateIncoming({ channelId: "telegram", chatId: "chat-1", text: "do work" });
+    await sleep(50);
 
-  const allMessages = [...adapter.sentMessages, ...adapter.sentMarkupMessages];
-  const summaryMsg = allMessages.find((m) => m.text.includes("tools used") || m.text.includes("1 tool used"));
-  assert.ok(summaryMsg, "should send execution summary on error");
-  assert.ok(summaryMsg!.text.includes("❌"), "should use error icon for failed execution");
+    const allMessages = [...adapter.sentMessages, ...adapter.sentMarkupMessages];
+    const summaryMsg = allMessages.find((m) => m.text.includes("tools used") || m.text.includes("1 tool used"));
+    assert.ok(summaryMsg, "should send execution summary on error");
+    assert.ok(summaryMsg!.text.includes("❌"), "should use error icon for failed execution");
 
-  await hub.stop();
-  delete process.env.SHOW_EXECUTION_SUMMARY;
+    await hub.stop();
+  } finally {
+    delete process.env.SHOW_EXECUTION_SUMMARY;
+  }
 });
 
 test("ChannelHub finalizes tool activity even when promotion send is in-flight", async () => {
@@ -368,91 +380,97 @@ test("ChannelHub finalizes streamed draft via editMessage (not sendMessageDraft)
 
 test("ChannelHub sends execution summary to forum topic thread", async () => {
   process.env.SHOW_EXECUTION_SUMMARY = "true";
-  const eventBus = new EventBus();
-  const logger = createLogger("error");
-  const adapter = new MockAdapter("telegram");
-  adapter.forumTopicsEnabled = true;
+  try {
+    const eventBus = new EventBus();
+    const logger = createLogger("error");
+    const adapter = new MockAdapter("telegram");
+    adapter.forumTopicsEnabled = true;
 
-  const runtime: Runtime = {
-    async execute(message, executionId, bus): Promise<void> {
-      const base = { executionId, channelId: message.channelId, chatId: message.chatId };
+    const runtime: Runtime = {
+      async execute(message, executionId, bus): Promise<void> {
+        const base = { executionId, channelId: message.channelId, chatId: message.chatId };
 
-      bus.emit({ ...base, type: "start", timestamp: 1000, payload: { agentName: "claude" } });
-      bus.emit({ ...base, type: "tool-use", timestamp: 1500, payload: { toolName: "Read", toolInput: { file_path: "/a.ts" } } });
-      bus.emit({ ...base, type: "tool-use", timestamp: 2000, payload: { toolName: "Edit", toolInput: { file_path: "/a.ts" } } });
-      bus.emit({ ...base, type: "complete", timestamp: 7000, payload: { response: "done" } });
-    }
-  };
+        bus.emit({ ...base, type: "start", timestamp: 1000, payload: { agentName: "claude" } });
+        bus.emit({ ...base, type: "tool-use", timestamp: 1500, payload: { toolName: "Read", toolInput: { file_path: "/a.ts" } } });
+        bus.emit({ ...base, type: "tool-use", timestamp: 2000, payload: { toolName: "Edit", toolInput: { file_path: "/a.ts" } } });
+        bus.emit({ ...base, type: "complete", timestamp: 7000, payload: { response: "done" } });
+      }
+    };
 
-  const router: Router = { select(message) { return { runtime, message }; } };
-  const hub = new ChannelHub([adapter], router, eventBus, logger);
-  await hub.start();
+    const router: Router = { select(message) { return { runtime, message }; } };
+    const hub = new ChannelHub([adapter], router, eventBus, logger);
+    await hub.start();
 
-  await adapter.simulateIncoming({ channelId: "telegram", chatId: "chat-1", text: "do work" });
-  await sleep(50);
+    await adapter.simulateIncoming({ channelId: "telegram", chatId: "chat-1", text: "do work" });
+    await sleep(50);
 
-  // Execution summary should be sent via sendMessageWithMarkup with threadId
-  const summaryMsg = adapter.sentMarkupMessages.find((m) => m.text.includes("tools used"));
-  assert.ok(summaryMsg, "should send execution summary via sendMessageWithMarkup");
-  assert.ok(summaryMsg!.options?.threadId, "execution summary should include threadId for forum topic");
+    // Execution summary should be sent via sendMessageWithMarkup with threadId
+    const summaryMsg = adapter.sentMarkupMessages.find((m) => m.text.includes("tools used"));
+    assert.ok(summaryMsg, "should send execution summary via sendMessageWithMarkup");
+    assert.ok(summaryMsg!.options?.threadId, "execution summary should include threadId for forum topic");
 
-  // Summary should NOT appear in plain sentMessages (no topic routing)
-  const plainSummary = adapter.sentMessages.find((m) => m.text.includes("tools used"));
-  assert.equal(plainSummary, undefined, "should not send summary via plain sendMessage when topic exists");
+    // Summary should NOT appear in plain sentMessages (no topic routing)
+    const plainSummary = adapter.sentMessages.find((m) => m.text.includes("tools used"));
+    assert.equal(plainSummary, undefined, "should not send summary via plain sendMessage when topic exists");
 
-  // Forum topic should be closed after the summary
-  assert.ok(adapter.closedTopics.length > 0, "should close forum topic after sending summary");
+    // Forum topic should be closed after the summary
+    assert.ok(adapter.closedTopics.length > 0, "should close forum topic after sending summary");
 
-  await hub.stop();
-  delete process.env.SHOW_EXECUTION_SUMMARY;
+    await hub.stop();
+  } finally {
+    delete process.env.SHOW_EXECUTION_SUMMARY;
+  }
 });
 
 test("ChannelHub sends execution summary before flushing streamed draft to prevent ordering issues", async () => {
   process.env.SHOW_EXECUTION_SUMMARY = "true";
-  const eventBus = new EventBus();
-  const logger = createLogger("error");
-  const adapter = new MockAdapter("telegram");
+  try {
+    const eventBus = new EventBus();
+    const logger = createLogger("error");
+    const adapter = new MockAdapter("telegram");
 
-  const runtime: Runtime = {
-    async execute(message, executionId, bus): Promise<void> {
-      const base = { executionId, channelId: message.channelId, chatId: message.chatId };
+    const runtime: Runtime = {
+      async execute(message, executionId, bus): Promise<void> {
+        const base = { executionId, channelId: message.channelId, chatId: message.chatId };
 
-      bus.emit({ ...base, type: "start", timestamp: 1000, payload: { agentName: "claude" } });
+        bus.emit({ ...base, type: "start", timestamp: 1000, payload: { agentName: "claude" } });
 
-      // Simulate tool uses so the summary threshold is met
-      bus.emit({ ...base, type: "tool-use", timestamp: 1500, payload: { toolName: "Read", toolInput: { file_path: "/a.ts" } } });
-      bus.emit({ ...base, type: "tool-use", timestamp: 2000, payload: { toolName: "Edit", toolInput: { file_path: "/a.ts" } } });
+        // Simulate tool uses so the summary threshold is met
+        bus.emit({ ...base, type: "tool-use", timestamp: 1500, payload: { toolName: "Read", toolInput: { file_path: "/a.ts" } } });
+        bus.emit({ ...base, type: "tool-use", timestamp: 2000, payload: { toolName: "Edit", toolInput: { file_path: "/a.ts" } } });
 
-      // Stream text to create a visible draft
-      bus.emit({ ...base, type: "stream-text", timestamp: 3000, payload: { text: "Here is the response content" } });
+        // Stream text to create a visible draft
+        bus.emit({ ...base, type: "stream-text", timestamp: 3000, payload: { text: "Here is the response content" } });
 
-      // Complete after enough time for summary to appear
-      bus.emit({ ...base, type: "complete", timestamp: 8000, payload: { response: "Here is the response content" } });
-    }
-  };
+        // Complete after enough time for summary to appear
+        bus.emit({ ...base, type: "complete", timestamp: 8000, payload: { response: "Here is the response content" } });
+      }
+    };
 
-  const router: Router = { select(message) { return { runtime, message }; } };
-  const hub = new ChannelHub([adapter], router, eventBus, logger);
-  await hub.start();
+    const router: Router = { select(message) { return { runtime, message }; } };
+    const hub = new ChannelHub([adapter], router, eventBus, logger);
+    await hub.start();
 
-  await adapter.simulateIncoming({ channelId: "telegram", chatId: "chat-1", text: "do work" });
-  await sleep(50);
+    await adapter.simulateIncoming({ channelId: "telegram", chatId: "chat-1", text: "do work" });
+    await sleep(50);
 
-  // Find the summary send and the draft finalization edit in the operation log
-  const summaryIdx = adapter.operationLog.findIndex(
-    (op) => (op.op === "sendMessage" || op.op === "sendMessageWithMarkup") && op.text?.includes("tools used")
-  );
-  const flushEditIdx = adapter.operationLog.findIndex(
-    (op) => op.op === "editMessage" && op.text?.includes("Here is the response")
-  );
+    // Find the summary send and the draft finalization edit in the operation log
+    const summaryIdx = adapter.operationLog.findIndex(
+      (op) => (op.op === "sendMessage" || op.op === "sendMessageWithMarkup") && op.text?.includes("tools used")
+    );
+    const flushEditIdx = adapter.operationLog.findIndex(
+      (op) => op.op === "editMessage" && op.text?.includes("Here is the response")
+    );
 
-  assert.ok(summaryIdx >= 0, "should send execution summary");
-  assert.ok(flushEditIdx >= 0, "should flush draft via editMessage");
-  assert.ok(
-    summaryIdx < flushEditIdx,
-    `summary (index ${summaryIdx}) should be sent before draft flush edit (index ${flushEditIdx}) to prevent user messages from appearing between response and summary`
-  );
+    assert.ok(summaryIdx >= 0, "should send execution summary");
+    assert.ok(flushEditIdx >= 0, "should flush draft via editMessage");
+    assert.ok(
+      summaryIdx < flushEditIdx,
+      `summary (index ${summaryIdx}) should be sent before draft flush edit (index ${flushEditIdx}) to prevent user messages from appearing between response and summary`
+    );
 
-  await hub.stop();
-  delete process.env.SHOW_EXECUTION_SUMMARY;
+    await hub.stop();
+  } finally {
+    delete process.env.SHOW_EXECUTION_SUMMARY;
+  }
 });
