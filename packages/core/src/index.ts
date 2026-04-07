@@ -138,8 +138,8 @@ export async function startDaemon(): Promise<void> {
 
   // Initialize memory refinement scheduler if configured
   let refinementScheduler: MemoryRefinementScheduler | undefined;
-  if (memoryProvider && config.memory?.extraction && config.memory.refinement) {
-    const refiner = new MemoryRefiner(config.memory.extraction, logger);
+  if (memoryProvider && config.memory?.refinement) {
+    const refiner = new MemoryRefiner(logger, config.memory.refinement.model);
     refinementScheduler = new MemoryRefinementScheduler(
       memoryProvider,
       refiner,

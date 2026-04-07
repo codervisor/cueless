@@ -1,5 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { MemoryExtractionConfig } from "../config";
+import { spawn } from "child_process";
 import { Logger } from "../logging";
 import { MemoryFact, MemoryTag } from "./store";
 
@@ -49,10 +48,15 @@ Output strict JSON with this structure (nothing else):
 If no changes are needed, output: {"keep": [], "removed": [], "added": []}
 (empty keep means "keep everything as-is")`;
 
+/**
+ * Memory refiner that uses Claude Code CLI (`claude --print`) to consolidate facts.
+ * No separate API key needed — uses the same Claude installation as the agent.
+ */
 export class MemoryRefiner {
   constructor(
-    private readonly extractionConfig: MemoryExtractionConfig,
     private readonly logger?: Logger,
+    private readonly model?: string,
+    private readonly timeoutMs: number = 120_000,
   ) {}
 
   async refine(facts: MemoryFact[]): Promise<RefinementResult> {
@@ -69,10 +73,7 @@ export class MemoryRefiner {
     const prompt = REFINEMENT_PROMPT.replace("{facts}", factsJson);
 
     try {
-      const text = this.extractionConfig.provider === "anthropic"
-        ? await this.callAnthropic(prompt)
-        : await this.callOpenAI(prompt);
-
+      const text = await this.callCli(prompt);
       return this.parseResult(text, facts);
     } catch (error) {
       this.logger?.warn("Memory refinement failed.", {
@@ -82,42 +83,45 @@ export class MemoryRefiner {
     }
   }
 
-  private async callAnthropic(prompt: string): Promise<string> {
-    const client = new Anthropic({ apiKey: this.extractionConfig.apiKey });
-    const response = await client.messages.create({
-      model: this.extractionConfig.model,
-      max_tokens: 2048,
-      messages: [{ role: "user", content: prompt }],
+  private callCli(prompt: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const args = ["--print", "--output-format", "text"];
+
+      if (this.model) {
+        args.push("--model", this.model);
+      }
+
+      args.push("--max-turns", "1");
+      args.push(prompt);
+
+      const proc = spawn("claude", args, {
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: this.timeoutMs,
+      });
+
+      let stdout = "";
+      let stderr = "";
+
+      proc.stdout.on("data", (chunk: Buffer) => {
+        stdout += chunk.toString();
+      });
+
+      proc.stderr.on("data", (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
+
+      proc.on("error", (err) => {
+        reject(new Error(`Failed to spawn claude CLI: ${err.message}`));
+      });
+
+      proc.on("close", (code) => {
+        if (code !== 0) {
+          reject(new Error(`claude CLI exited with code ${code}: ${stderr.slice(0, 300)}`));
+        } else {
+          resolve(stdout);
+        }
+      });
     });
-
-    return response.content
-      .filter((block): block is Anthropic.TextBlock => block.type === "text")
-      .map((block) => block.text)
-      .join("");
-  }
-
-  private async callOpenAI(prompt: string): Promise<string> {
-    const baseUrl = this.extractionConfig.baseUrl!.replace(/\/+$/, "");
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.extractionConfig.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: this.extractionConfig.model,
-        max_tokens: 2048,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-
-    if (!response.ok) {
-      const body = await response.text().catch(() => "");
-      throw new Error(`OpenAI-compatible API error ${response.status}: ${body.slice(0, 200)}`);
-    }
-
-    const data = await response.json() as { choices?: { message?: { content?: string } }[] };
-    return data.choices?.[0]?.message?.content || "";
   }
 
   private parseResult(text: string, currentFacts: MemoryFact[]): RefinementResult {

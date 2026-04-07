@@ -10,7 +10,7 @@ export interface RefinementSchedulerConfig {
 }
 
 const DEFAULT_CONFIG: RefinementSchedulerConfig = {
-  intervalMs: 24 * 60 * 60 * 1000, // 24 hours
+  intervalMs: 60 * 60 * 1000, // 1 hour
   factThreshold: 50,
 };
 
