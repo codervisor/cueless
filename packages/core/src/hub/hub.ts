@@ -793,11 +793,18 @@ export class ChannelHub {
       const hasDraftContent = draft && draft.text.trim().length > 0;
 
       if (hasDraftContent) {
-        await this.flushStreamDraft(adapter, event.channelId, event.chatId, event.executionId, topicId);
+        try {
+          await this.flushStreamDraft(adapter, event.channelId, event.chatId, event.executionId, topicId);
+        } catch {
+          // Best-effort: flushStreamDraft cleans up draft state in its finally
+          // block. Continue with the rest of the completion path so error text,
+          // summary, and topic close still happen.
+        }
       }
 
-      // Non-time-sensitive cleanup — runs after the draft is already stabilized
-      await Promise.all([
+      // Non-time-sensitive cleanup — runs after the draft is already stabilized.
+      // Use allSettled so a failure in one doesn't abort the completion path.
+      await Promise.allSettled([
         this.finalizeToolActivity(adapter, event.channelId, event.chatId, event.executionId),
         this.flushAndDeleteThrottler(event.channelId, event.chatId),
       ]);
@@ -1186,28 +1193,32 @@ export class ChannelHub {
       }
     };
 
-    // Final flush: convert draft to a permanent message via editMessage so it
-    // doesn't disappear once the draft stream ends.
-    if (draft.draftId && !draft.draftFailed && draft.messageId && adapter.editMessage) {
-      await adapter.editMessage(chatId, draft.messageId, markdownToTelegramHtml(chunks[0])).catch(() => {});
-      for (let i = 1; i < chunks.length; i++) {
-        await sendChunk(markdownToTelegramHtml(chunks[i]));
+    try {
+      // Final flush: convert draft to a permanent message via editMessage so it
+      // doesn't disappear once the draft stream ends.
+      if (draft.draftId && !draft.draftFailed && draft.messageId && adapter.editMessage) {
+        await adapter.editMessage(chatId, draft.messageId, markdownToTelegramHtml(chunks[0])).catch(() => {});
+        for (let i = 1; i < chunks.length; i++) {
+          await sendChunk(markdownToTelegramHtml(chunks[i]));
+        }
+      } else if (draft.messageId && adapter.editMessage) {
+        // Edit existing message with first chunk
+        await adapter.editMessage(chatId, draft.messageId, markdownToTelegramHtml(chunks[0])).catch(() => {});
+        // Send remaining chunks as new messages
+        for (let i = 1; i < chunks.length; i++) {
+          await sendChunk(markdownToTelegramHtml(chunks[i]));
+        }
+      } else if (chunks.length > 0) {
+        // No existing message — send all chunks
+        for (const chunk of chunks) {
+          await sendChunk(markdownToTelegramHtml(chunk));
+        }
       }
-    } else if (draft.messageId && adapter.editMessage) {
-      // Edit existing message with first chunk
-      await adapter.editMessage(chatId, draft.messageId, markdownToTelegramHtml(chunks[0])).catch(() => {});
-      // Send remaining chunks as new messages
-      for (let i = 1; i < chunks.length; i++) {
-        await sendChunk(markdownToTelegramHtml(chunks[i]));
-      }
-    } else if (chunks.length > 0) {
-      // No existing message — send all chunks
-      for (const chunk of chunks) {
-        await sendChunk(markdownToTelegramHtml(chunk));
-      }
+    } finally {
+      // Always clean up the draft entry to prevent state leaks
+      this.streamDrafts.delete(draftKey);
     }
 
-    this.streamDrafts.delete(draftKey);
     return true;
   }
 
