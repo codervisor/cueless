@@ -1066,22 +1066,22 @@ export class ChannelHub {
     // If the message was sent to Telegram, edit it into a detailed completion summary
     if (activity.promoted && activity.messageId && adapter.editMessage && activity.tools.length > 0) {
       const total = activity.tools.length;
-      // Deduplicate consecutive identical tools (same name+input) for cleaner display
-      const deduped: Array<{ name: string; input?: Record<string, unknown>; count: number }> = [];
+      // Deduplicate consecutive identical tools by their formatted description
+      const deduped: Array<{ desc: string; count: number }> = [];
       for (const tool of activity.tools) {
+        const desc = formatToolDescription(tool.name, tool.input);
         const last = deduped[deduped.length - 1];
-        if (last && last.name === tool.name && JSON.stringify(last.input) === JSON.stringify(tool.input)) {
+        if (last && last.desc === desc) {
           last.count++;
         } else {
-          deduped.push({ name: tool.name, input: tool.input, count: 1 });
+          deduped.push({ desc, count: 1 });
         }
       }
       const maxVisible = ChannelHub.TOOL_ACTIVITY_MAX_VISIBLE;
       const visible = deduped.slice(-maxVisible);
       const lines: string[] = [];
       for (const entry of visible) {
-        const desc = formatToolDescription(entry.name, entry.input);
-        lines.push(entry.count > 1 ? `✓ ${desc} <i>x${entry.count}</i>` : `✓ ${desc}`);
+        lines.push(entry.count > 1 ? `✓ ${entry.desc} <i>x${entry.count}</i>` : `✓ ${entry.desc}`);
       }
       const header = deduped.length > maxVisible
         ? `✅ <b>Done</b> <i>(${total} steps, showing last ${maxVisible})</i>`
