@@ -329,8 +329,8 @@ test("ChannelHub finalizes tool activity even when promotion send is in-flight",
   await sleep(100);
 
   // The activity message should have been edited into a summary (not left as "Working")
-  const edited = adapter.editedMessages.find((m) => m.text.includes("📋"));
-  assert.ok(edited, "should edit the Working message into a compact summary after awaiting in-flight send");
+  const edited = adapter.editedMessages.find((m) => m.text.includes("✅"));
+  assert.ok(edited, "should edit the Working message into a detailed completion summary after awaiting in-flight send");
 
   await hub.stop();
 });
