@@ -523,10 +523,14 @@ test("CliRuntime emits thinking, tool-use, and stream-text in correct order", as
     .filter((e) => e.type === "thinking" || e.type === "tool-use" || e.type === "stream-text")
     .map((e) => e.type);
 
-  // Thinking should come before tool-use and stream-text
+  // Verify all event types are present before comparing order
   const firstThinking = relevantTypes.indexOf("thinking");
   const firstToolUse = relevantTypes.indexOf("tool-use");
   const firstStreamText = relevantTypes.indexOf("stream-text");
+  assert.ok(firstThinking >= 0, "should emit a thinking event");
+  assert.ok(firstToolUse >= 0, "should emit a tool-use event");
+  assert.ok(firstStreamText >= 0, "should emit a stream-text event");
+  // Thinking should come before tool-use and stream-text
   assert.ok(firstThinking < firstToolUse, "thinking should come before tool-use");
   assert.ok(firstThinking < firstStreamText, "thinking should come before stream-text");
 });
