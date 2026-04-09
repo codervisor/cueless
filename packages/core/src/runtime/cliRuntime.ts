@@ -44,6 +44,12 @@ export class CliRuntime implements Runtime {
   /** Track in-flight thinking blocks to accumulate thinking text from thinking_delta. */
   private pendingThinkingBlocks = new Map<string, { index: number; text: string }>(); // executionId → current thinking block
 
+  /** Clean up pending block state for an execution (e.g. on close/error/timeout). */
+  private cleanupPendingBlocks(executionId: string): void {
+    this.pendingToolBlocks.delete(executionId);
+    this.pendingThinkingBlocks.delete(executionId);
+  }
+
   /** Resolved output format — defaults to stream-json inside CliRuntime. */
   private get resolvedOutputFormat(): "text" | "json" | "stream-json" {
     return this.config.outputFormat ?? "stream-json";
@@ -403,6 +409,7 @@ export class CliRuntime implements Runtime {
         timeout = setTimeout(() => {
           child.kill("SIGKILL");
           cleanupPermissionSub();
+          this.cleanupPendingBlocks(executionId);
           if (mcpFiles) this.cleanupMcpFiles(mcpFiles.mcpDir, mcpFiles.mcpConfigPath, mcpFiles.stateFilePath);
           this.logger.error("CLI runtime timeout — killing process.", {
             executionId,
@@ -505,6 +512,7 @@ export class CliRuntime implements Runtime {
         clearTimeout(timeout);
         clearInterval(heartbeat);
         cleanupPermissionSub();
+        this.cleanupPendingBlocks(executionId);
         if (mcpFiles) this.cleanupMcpFiles(mcpFiles.mcpDir, mcpFiles.mcpConfigPath, mcpFiles.stateFilePath);
         let reason = error.message;
         if (error.code === "ENOENT") {
@@ -601,6 +609,9 @@ export class CliRuntime implements Runtime {
         if (!response && code === 0) {
           this.logger.warn("CLI runtime exited successfully but produced no stdout output.", { executionId });
         }
+
+        // Clean up any in-flight block state (in case the CLI exited mid-block)
+        this.cleanupPendingBlocks(executionId);
 
         eventBus.emit({
           executionId,

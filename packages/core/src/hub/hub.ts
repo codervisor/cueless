@@ -171,6 +171,8 @@ const formatDuration = (ms: number): string => {
 
 /** Format a human-readable tool activity description (like Claude Code mobile). */
 const formatToolDescription = (toolName: string, toolInput?: Record<string, unknown>): string => {
+  // Thinking has no toolInput but needs a custom label
+  if (toolName.toLowerCase() === "thinking") return "🧠 Thinking";
   if (!toolInput) return `<b>${escapeHtml(toolName)}</b>`;
 
   const short = (val: unknown, max = 40): string => {
@@ -199,8 +201,6 @@ const formatToolDescription = (toolName: string, toolInput?: Record<string, unkn
       return command ? `Running <code>${short(command, 60)}</code>` : "Running command";
     case "agent":
       return prompt ? `Agent: ${short(prompt, 50)}` : "Running sub-agent";
-    case "thinking":
-      return "🧠 Thinking";
     default: {
       // For unknown tools, show the tool name with the first string input value
       const firstVal = Object.values(toolInput).find((v) => typeof v === "string");
@@ -1107,7 +1107,7 @@ export class ChannelHub {
       const desc = formatToolDescription(tool.name, tool.input);
       const isLast = i === visible.length - 1;
       // Current (last) tool gets a spinner indicator, previous ones get a checkmark
-      const prefix = tool.isSubagent ? "  " : ""; // indent subagent steps
+      const prefix = tool.isSubagent ? "↳ " : ""; // indent subagent steps
       lines.push(isLast ? `${prefix}▸ ${desc}` : `${prefix}✓ ${desc}`);
     }
 
@@ -1169,7 +1169,7 @@ export class ChannelHub {
       const visible = deduped.slice(-maxVisible);
       const lines: string[] = [];
       for (const entry of visible) {
-        const prefix = entry.isSubagent ? "  " : "";
+        const prefix = entry.isSubagent ? "↳ " : "";
         lines.push(entry.count > 1 ? `${prefix}✓ ${entry.desc} <i>x${entry.count}</i>` : `${prefix}✓ ${entry.desc}`);
       }
       const header = deduped.length > maxVisible
