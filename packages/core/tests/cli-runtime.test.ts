@@ -15,6 +15,7 @@ const TEST_CMD = path.resolve(__dirname, "helpers/test-cmd.sh");
 const STALE_SESSION_CMD = path.resolve(__dirname, "helpers/stale-session-cmd.sh");
 const STREAM_JSON_CMD = path.resolve(__dirname, "helpers/stream-json-cmd.sh");
 const STREAM_JSON_THINKING_CMD = path.resolve(__dirname, "helpers/stream-json-thinking-cmd.sh");
+const STREAM_JSON_SUBAGENT_CMD = path.resolve(__dirname, "helpers/stream-json-subagent-cmd.sh");
 
 const msg = (overrides?: Partial<IMMessage>): IMMessage => ({
   channelId: "telegram",
@@ -545,4 +546,45 @@ test("CliRuntime does not emit duplicate events from assistant message with thin
   // Tool-use events: 2 per tool (start + enriched), not duplicated from assistant
   const toolUseEvents = events.filter((e) => e.type === "tool-use");
   assert.equal(toolUseEvents.length, 2, "should emit two tool-use events per tool (start + enriched)");
+});
+
+// ---------- subagent events (parent_tool_use_id) ----------
+
+test("CliRuntime propagates parentToolUseId from subagent stream events", async () => {
+  const config: AgentConfig = { name: "subagent-test", command: STREAM_JSON_SUBAGENT_CMD, outputFormat: "stream-json" };
+  const runtime = new CliRuntime(config, logger);
+  const eventBus = new EventBus();
+  const events = collect(eventBus);
+
+  await runtime.execute(msg(), "exec-subagent-1", eventBus);
+
+  // Parent Agent tool-use should NOT have parentToolUseId
+  const agentToolEvents = events.filter((e) => e.type === "tool-use" && e.payload?.toolName === "Agent");
+  assert.ok(agentToolEvents.length > 0, "should have Agent tool-use events");
+  assert.equal(agentToolEvents[0].payload?.parentToolUseId, undefined, "parent Agent tool should not have parentToolUseId");
+
+  // Subagent tool-use events should have parentToolUseId set
+  const subagentToolEvents = events.filter((e) => e.type === "tool-use" && e.payload?.parentToolUseId);
+  assert.ok(subagentToolEvents.length > 0, "should have subagent tool-use events with parentToolUseId");
+  assert.equal(subagentToolEvents[0].payload?.parentToolUseId, "toolu_agent_1", "parentToolUseId should match the Agent tool_use id");
+});
+
+test("CliRuntime tags subagent stream-text with parentToolUseId", async () => {
+  const config: AgentConfig = { name: "subagent-test", command: STREAM_JSON_SUBAGENT_CMD, outputFormat: "stream-json" };
+  const runtime = new CliRuntime(config, logger);
+  const eventBus = new EventBus();
+  const events = collect(eventBus);
+
+  await runtime.execute(msg(), "exec-subagent-2", eventBus);
+
+  const textEvents = events.filter((e) => e.type === "stream-text");
+  // Subagent text should have parentToolUseId
+  const subagentText = textEvents.filter((e) => e.payload?.parentToolUseId);
+  assert.ok(subagentText.length > 0, "subagent text events should have parentToolUseId");
+  assert.equal(subagentText[0].payload?.text, "Found 3 issues.", "subagent text content should be correct");
+
+  // Parent text should NOT have parentToolUseId
+  const parentText = textEvents.filter((e) => !e.payload?.parentToolUseId);
+  assert.ok(parentText.length > 0, "parent text events should not have parentToolUseId");
+  assert.equal(parentText[0].payload?.text, "The review found 3 issues.", "parent text content should be correct");
 });

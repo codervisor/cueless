@@ -34,6 +34,9 @@ export interface ExecutionEvent {
     // Streaming fields
     sessionId?: string;
 
+    // Subagent context — set when the event originates from within a subagent's execution
+    parentToolUseId?: string;
+
     // Source message metadata (e.g. for reactions)
     messageId?: number;
   };

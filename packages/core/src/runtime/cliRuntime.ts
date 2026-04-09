@@ -715,6 +715,10 @@ export class CliRuntime implements Runtime {
       if (!event) return;
       const eventType = event.type as string | undefined;
 
+      // parent_tool_use_id is set on events originating from a subagent context.
+      // We thread it through to emitted events so the hub can display them differently.
+      const parentToolUseId = (parsed.parent_tool_use_id as string | undefined) || undefined;
+
       if (eventType === "content_block_start") {
         const block = event.content_block as Record<string, unknown> | undefined;
         if (block?.type === "tool_use") {
@@ -734,6 +738,7 @@ export class CliRuntime implements Runtime {
             timestamp: Date.now(),
             payload: {
               toolName: block.name as string,
+              parentToolUseId,
             }
           });
         } else if (block?.type === "thinking") {
@@ -747,6 +752,7 @@ export class CliRuntime implements Runtime {
             chatId: message.chatId,
             type: "thinking",
             timestamp: Date.now(),
+            payload: { parentToolUseId },
           });
         } else if (block?.type !== "text") {
           // "text" blocks are expected and handled via text_delta below.
@@ -764,7 +770,7 @@ export class CliRuntime implements Runtime {
               chatId: message.chatId,
               type: "stream-text",
               timestamp: Date.now(),
-              payload: { text }
+              payload: { text, parentToolUseId }
             });
           }
         } else if (delta?.type === "input_json_delta") {
@@ -802,6 +808,7 @@ export class CliRuntime implements Runtime {
                 payload: {
                   toolName: pendingTool.name,
                   toolInput,
+                  parentToolUseId,
                 }
               });
             } catch {
