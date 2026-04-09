@@ -847,6 +847,10 @@ export class ChannelHub {
     }
 
     // Handle streaming text — accumulate and send via sendMessageDraft (or edit fallback)
+    // Skip subagent text — it's intermediate and only the Agent tool result matters.
+    if ((event.type === "stream-text" || event.type === "stdout") && event.payload?.parentToolUseId) {
+      return;
+    }
     if (event.type === "stream-text" || event.type === "stdout") {
       // Stop typing indicator once we start streaming actual text
       this.stopTypingIndicator(event.channelId, event.chatId, event.executionId);
@@ -1047,6 +1051,7 @@ export class ChannelHub {
   private async forwardToolActivity(adapter: IMAdapter, event: ExecutionEvent, topicId?: number): Promise<void> {
     const toolName = event.payload?.toolName || "unknown";
     const toolInput = event.payload?.toolInput;
+    const isSubagent = !!event.payload?.parentToolUseId;
     const activityKey = `${event.channelId}:${event.chatId}:${event.executionId}`;
 
     let activity = this.toolActivityMessages.get(activityKey);
@@ -1061,7 +1066,7 @@ export class ChannelHub {
     if (lastTool && lastTool.name === toolName && !lastTool.input && toolInput && Object.keys(toolInput).length > 0) {
       lastTool.input = toolInput;
     } else {
-      activity.tools.push({ name: toolName, input: toolInput });
+      activity.tools.push({ name: toolName, input: toolInput, isSubagent });
     }
 
     if (activity.promoted) {
@@ -1090,7 +1095,7 @@ export class ChannelHub {
   /** Maximum number of recent tool steps to show in the activity timeline. */
   private static readonly TOOL_ACTIVITY_MAX_VISIBLE = 5;
 
-  private async sendOrEditToolActivity(adapter: IMAdapter, chatId: string, activity: { tools: Array<{ name: string; input?: Record<string, unknown> }>; messageId?: number; promoted: boolean }, topicId?: number): Promise<void> {
+  private async sendOrEditToolActivity(adapter: IMAdapter, chatId: string, activity: { tools: Array<{ name: string; input?: Record<string, unknown>; isSubagent?: boolean }>; messageId?: number; promoted: boolean }, topicId?: number): Promise<void> {
     const total = activity.tools.length;
     const maxVisible = ChannelHub.TOOL_ACTIVITY_MAX_VISIBLE;
     // Show the last N tools as a timeline
@@ -1102,7 +1107,8 @@ export class ChannelHub {
       const desc = formatToolDescription(tool.name, tool.input);
       const isLast = i === visible.length - 1;
       // Current (last) tool gets a spinner indicator, previous ones get a checkmark
-      lines.push(isLast ? `▸ ${desc}` : `✓ ${desc}`);
+      const prefix = tool.isSubagent ? "  " : ""; // indent subagent steps
+      lines.push(isLast ? `${prefix}▸ ${desc}` : `${prefix}✓ ${desc}`);
     }
 
     const header = total > maxVisible
@@ -1149,21 +1155,22 @@ export class ChannelHub {
     if (activity.promoted && activity.messageId && adapter.editMessage && activity.tools.length > 0) {
       const total = activity.tools.length;
       // Deduplicate consecutive identical tools by their formatted description
-      const deduped: Array<{ desc: string; count: number }> = [];
+      const deduped: Array<{ desc: string; count: number; isSubagent?: boolean }> = [];
       for (const tool of activity.tools) {
         const desc = formatToolDescription(tool.name, tool.input);
         const last = deduped[deduped.length - 1];
-        if (last && last.desc === desc) {
+        if (last && last.desc === desc && last.isSubagent === tool.isSubagent) {
           last.count++;
         } else {
-          deduped.push({ desc, count: 1 });
+          deduped.push({ desc, count: 1, isSubagent: tool.isSubagent });
         }
       }
       const maxVisible = ChannelHub.TOOL_ACTIVITY_MAX_VISIBLE;
       const visible = deduped.slice(-maxVisible);
       const lines: string[] = [];
       for (const entry of visible) {
-        lines.push(entry.count > 1 ? `✓ ${entry.desc} <i>x${entry.count}</i>` : `✓ ${entry.desc}`);
+        const prefix = entry.isSubagent ? "  " : "";
+        lines.push(entry.count > 1 ? `${prefix}✓ ${entry.desc} <i>x${entry.count}</i>` : `${prefix}✓ ${entry.desc}`);
       }
       const header = deduped.length > maxVisible
         ? `✅ <b>Done</b> <i>(${total} steps, showing last ${maxVisible})</i>`
