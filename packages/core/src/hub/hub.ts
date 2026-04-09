@@ -171,8 +171,6 @@ const formatDuration = (ms: number): string => {
 
 /** Format a human-readable tool activity description (like Claude Code mobile). */
 const formatToolDescription = (toolName: string, toolInput?: Record<string, unknown>): string => {
-  // Thinking has no toolInput but needs a custom label
-  if (toolName.toLowerCase() === "thinking") return "🧠 Thinking";
   if (!toolInput) return `<b>${escapeHtml(toolName)}</b>`;
 
   const short = (val: unknown, max = 40): string => {
@@ -824,13 +822,10 @@ export class ChannelHub {
       return;
     }
 
-    // Handle thinking — show as an activity step in the tool timeline
+    // Handle thinking — no visible step (thinking content is not shown to users).
+    // Just flush any pending draft and keep the typing indicator active.
     if (event.type === "thinking") {
       await this.flushStreamDraft(adapter, event.channelId, event.chatId, event.executionId, topicId);
-      await this.forwardToolActivity(adapter, {
-        ...event,
-        payload: { ...event.payload, toolName: "Thinking" },
-      }, topicId);
       this.startTypingIndicator(adapter, event.chatId, event.executionId, topicId);
       return;
     }
