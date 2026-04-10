@@ -172,7 +172,7 @@ const formatDuration = (ms: number): string => {
 /** Format a human-readable tool activity description (like Claude Code mobile). */
 const formatToolDescription = (toolName: string, toolInput?: Record<string, unknown>): string => {
   // Thinking has no toolInput but needs a custom label
-  if (toolName.toLowerCase() === "thinking") return "🧠 Thinking";
+  if (toolName.toLowerCase() === "thinking") return "<i>Thinking</i>";
   if (!toolInput) return `<b>${escapeHtml(toolName)}</b>`;
 
   const short = (val: unknown, max = 40): string => {
@@ -239,6 +239,7 @@ export class ChannelHub {
   private readonly permissionBridge: PermissionBridge;
   private readonly topicMap = new Map<string, number>(); // "channelId:chatId:executionId" → topicId
   private readonly streamDrafts = new Map<string, { text: string; messageId?: number; draftId?: number; draftFailed?: boolean }>(); // for streaming text accumulation
+  private readonly completionPending = new Set<string>(); // executionIds whose complete/error event is already queued — used to short-circuit pending stream-text sends
   private draftIdCounter = 0; // monotonic counter for Telegram draft IDs
   private readonly typingIntervals = new Map<string, ReturnType<typeof setInterval>>(); // periodic typing indicators
   private readonly toolActivityMessages = new Map<string, { tools: Array<{ name: string; input?: Record<string, unknown>; isSubagent?: boolean }>; messageId?: number; promotionTimer?: ReturnType<typeof setTimeout>; promoted: boolean; sendingPromise?: Promise<void> }>(); // tool activity tracking
@@ -314,6 +315,8 @@ export class ChannelHub {
     this.toolActivityMessages.clear();
     this.eventQueues.clear();
     this.reactionMessageIds.clear();
+    this.streamDrafts.clear();
+    this.completionPending.clear();
 
     // Clean up any downloaded files from in-flight executions
     for (const executionId of Array.from(this.downloadedFiles.keys())) {
@@ -340,6 +343,15 @@ export class ChannelHub {
       }
 
       this.trackEvent(event);
+
+      // Mark completion as pending SYNCHRONOUSLY (before queueing) so any
+      // still-queued stream-text events can short-circuit their expensive
+      // sendMessageDraft calls. The complete handler will flush the final
+      // accumulated draft text via editMessage instead — avoiding a visible
+      // delay between the end of streaming and the draft→permanent transition.
+      if (event.type === "complete" || event.type === "error") {
+        this.completionPending.add(event.executionId);
+      }
 
       // Serialize event processing per execution to prevent race conditions
       // (e.g. stream-text sendMessage not yet resolved when complete fires)
@@ -864,6 +876,11 @@ export class ChannelHub {
       // Always stop typing indicator on completion
       this.stopTypingIndicator(event.channelId, event.chatId, event.executionId);
 
+      // Clear the short-circuit flag now that we're handling the completion.
+      // (It was set synchronously in subscribeEvents so earlier queued
+      // stream-text events could skip their sendMessageDraft calls.)
+      this.completionPending.delete(event.executionId);
+
       // Check if the response is already visible via a streaming draft.
       // If so, flush it IMMEDIATELY — before any other Telegram API calls —
       // to convert the ephemeral draft into a permanent message via editMessage.
@@ -1208,6 +1225,16 @@ export class ChannelHub {
     }
 
     draft.text += text;
+
+    // If the complete/error event is already queued, skip the expensive
+    // sendMessageDraft / editMessage call here. The complete handler will
+    // flush the fully accumulated draft.text via editMessage, which avoids
+    // a multi-second delay between the end of streaming and the final
+    // draft→permanent transition (the visible "Memory updated" message
+    // landing before the response message is finalized).
+    if (this.completionPending.has(event.executionId)) {
+      return;
+    }
 
     // If accumulated text exceeds the limit, finalize current message and start a new one
     if (draft.text.length > TELEGRAM_MSG_LIMIT && (draft.messageId || draft.draftId)) {
