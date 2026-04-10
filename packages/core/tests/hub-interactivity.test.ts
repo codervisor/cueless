@@ -349,9 +349,15 @@ test("ChannelHub finalizes streamed draft via editMessage (not sendMessageDraft)
 
       bus.emit({ ...base, type: "start", timestamp: 1000, payload: { agentName: "claude" } });
 
-      // Stream text to trigger sendMessageDraft during streaming
+      // Stream text to trigger sendMessageDraft during streaming.
+      // Yield between emits so the serialized event queue can process each
+      // stream-text event BEFORE complete is queued — otherwise the hub's
+      // completion short-circuit would skip the draft sends entirely (which
+      // is the correct behavior when events arrive in a synchronous burst).
       bus.emit({ ...base, type: "stream-text", timestamp: 2000, payload: { text: "Hello from the stream" } });
+      await sleep(10);
       bus.emit({ ...base, type: "stream-text", timestamp: 2500, payload: { text: " — more content here" } });
+      await sleep(10);
 
       // Complete triggers flushStreamDraft
       bus.emit({ ...base, type: "complete", timestamp: 8000, payload: { response: "Hello from the stream — more content here" } });
@@ -377,6 +383,53 @@ test("ChannelHub finalizes streamed draft via editMessage (not sendMessageDraft)
   // The draft messageId from streaming should match the editMessage messageId
   const lastDraft = adapter.draftMessages[adapter.draftMessages.length - 1];
   assert.equal(finalEdit!.messageId, lastDraft.messageId, "should edit the same message that was created as a draft");
+
+  await hub.stop();
+});
+
+test("ChannelHub short-circuits pending stream-text draft sends when complete is already queued", async () => {
+  // When stream-text events are queued alongside a complete event (e.g. a
+  // rapid burst at end-of-stream, or stream-text events still piled up in
+  // the per-execution queue), the hub should skip the expensive
+  // sendMessageDraft calls for the queued-but-not-yet-processed stream-text
+  // events and instead let the complete handler flush the full accumulated
+  // text immediately. This prevents a visible multi-second delay between
+  // the end of streaming and the final response message becoming permanent.
+  const eventBus = new EventBus();
+  const logger = createLogger("error");
+  const adapter = new MockAdapter("telegram");
+
+  const runtime: Runtime = {
+    async execute(message, executionId, bus): Promise<void> {
+      const base = { executionId, channelId: message.channelId, chatId: message.chatId };
+
+      bus.emit({ ...base, type: "start", timestamp: 1000, payload: { agentName: "claude" } });
+
+      // Emit stream-text and complete in the same synchronous turn so the
+      // complete event lands in the queue before any stream-text has been
+      // processed. The hub marks completion as pending synchronously in the
+      // emit handler, so stream-text events see the flag and skip.
+      bus.emit({ ...base, type: "stream-text", timestamp: 2000, payload: { text: "Final answer " } });
+      bus.emit({ ...base, type: "stream-text", timestamp: 2001, payload: { text: "from the agent." } });
+      bus.emit({ ...base, type: "complete", timestamp: 2002, payload: { response: "Final answer from the agent." } });
+    }
+  };
+
+  const router: Router = { select(message) { return { runtime, message }; } };
+  const hub = new ChannelHub([adapter], router, eventBus, logger);
+  await hub.start();
+
+  await adapter.simulateIncoming({ channelId: "telegram", chatId: "chat-1", text: "do work" });
+  await sleep(50);
+
+  // No intermediate draft sends should have happened — they were short-circuited.
+  assert.equal(adapter.draftMessages.length, 0, "should skip intermediate sendMessageDraft calls when complete is already queued");
+
+  // The final accumulated text should still have landed as a permanent
+  // message via the fallback path (sendMessageWithMarkup or sendMessage).
+  const finalMsgMarkup = adapter.sentMarkupMessages.find((m) => m.text.includes("Final answer from the agent"));
+  const finalMsgPlain = adapter.sentMessages.find((m) => m.text.includes("Final answer from the agent"));
+  assert.ok(finalMsgMarkup || finalMsgPlain, "should send the full accumulated response as a new permanent message");
 
   await hub.stop();
 });
@@ -442,8 +495,11 @@ test("ChannelHub flushes streamed draft before sending execution summary for sea
         bus.emit({ ...base, type: "tool-use", timestamp: 1500, payload: { toolName: "Read", toolInput: { file_path: "/a.ts" } } });
         bus.emit({ ...base, type: "tool-use", timestamp: 2000, payload: { toolName: "Edit", toolInput: { file_path: "/a.ts" } } });
 
-        // Stream text to create a visible draft
+        // Stream text to create a visible draft. Yield so the stream-text
+        // event is processed (and its draft sent) BEFORE complete is queued —
+        // otherwise the completion short-circuit would skip the draft send.
         bus.emit({ ...base, type: "stream-text", timestamp: 3000, payload: { text: "Here is the response content" } });
+        await sleep(10);
 
         // Complete after enough time for summary to appear
         bus.emit({ ...base, type: "complete", timestamp: 8000, payload: { response: "Here is the response content" } });
