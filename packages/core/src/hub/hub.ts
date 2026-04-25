@@ -26,6 +26,11 @@ import { SudoWatcher } from "./sudoWatcher";
 
 const TELEGRAM_MSG_LIMIT = 4000;
 
+/** Max chars for inline (compact) bash command preview on prior tool steps. */
+const BASH_INLINE_LIMIT = 150;
+/** Max chars for the active bash command rendered in a <pre><code> block. */
+const BASH_BLOCK_LIMIT = 1000;
+
 const truncate = (text: string, max: number): string => {
   if (text.length <= max) {
     return text;
@@ -169,8 +174,18 @@ const formatDuration = (ms: number): string => {
   return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
 };
 
-/** Format a human-readable tool activity description (like Claude Code mobile). */
-const formatToolDescription = (toolName: string, toolInput?: Record<string, unknown>): string => {
+/**
+ * Format a human-readable tool activity description (like Claude Code mobile).
+ *
+ * `detailed` is set for the currently-running tool so we can render its bash
+ * command in a full <pre><code> block (preserves whitespace, tap-to-copy on
+ * Telegram). Prior/completed tools stay compact to keep the timeline scannable.
+ */
+const formatToolDescription = (
+  toolName: string,
+  toolInput?: Record<string, unknown>,
+  detailed = false,
+): string => {
   // Thinking has no toolInput but needs a custom label
   if (toolName.toLowerCase() === "thinking") return "<i>Thinking</i>";
   if (!toolInput) return `<b>${escapeHtml(toolName)}</b>`;
@@ -197,8 +212,14 @@ const formatToolDescription = (toolName: string, toolInput?: Record<string, unkn
       return pattern ? `Finding files <code>${short(pattern)}</code>` : "Finding files";
     case "grep":
       return pattern ? `Searching for <code>${short(pattern)}</code>` : "Searching code";
-    case "bash":
-      return command ? `Running <code>${short(command, 60)}</code>` : "Running command";
+    case "bash": {
+      if (typeof command !== "string" || command.length === 0) return "Running command";
+      if (detailed) {
+        const block = escapeHtml(truncate(command, BASH_BLOCK_LIMIT));
+        return `Running\n<pre><code class="language-bash">${block}</code></pre>`;
+      }
+      return `Running <code>${short(command, BASH_INLINE_LIMIT)}</code>`;
+    }
     case "agent":
       return prompt ? `Agent: ${short(prompt, 50)}` : "Running sub-agent";
     default: {
@@ -1123,8 +1144,10 @@ export class ChannelHub {
 
     for (let i = 0; i < visible.length; i++) {
       const tool = visible[i];
-      const desc = formatToolDescription(tool.name, tool.input);
       const isLast = i === visible.length - 1;
+      // Active (last) tool gets the detailed renderer so its bash command shows
+      // as a full <pre><code> block; prior steps stay compact.
+      const desc = formatToolDescription(tool.name, tool.input, isLast);
       // Current (last) tool gets a spinner indicator, previous ones get a checkmark
       const prefix = tool.isSubagent ? "↳ " : ""; // indent subagent steps
       lines.push(isLast ? `${prefix}▸ ${desc}` : `${prefix}✓ ${desc}`);
